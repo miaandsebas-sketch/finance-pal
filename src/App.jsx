@@ -263,13 +263,13 @@ function MainApp({ session }) {
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading…</div>
         ) : tab === 'dashboard' ? (
-          <Dashboard latestSnap={latestSnap} accounts={accounts} snapshots={snapshots} />
+          <Dashboard latestSnap={latestSnap} accounts={accounts} snapshots={snapshots} dark={dark} />
         ) : tab === 'accounts' ? (
-          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="assets" />
+          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="assets" dark={dark} />
         ) : tab === 'debts' ? (
-          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="debts" />
+          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="debts" dark={dark} />
         ) : tab === 'investments' ? (
-          <Investments investments={investments} invTypes={invTypes} latestSnap={latestSnap} onRefresh={fetchAll} />
+          <Investments investments={investments} invTypes={invTypes} latestSnap={latestSnap} onRefresh={fetchAll} dark={dark} />
         ) : (
           <HomeImprovement items={homeItems} onRefresh={fetchAll} device={device} />
         )}
@@ -300,7 +300,7 @@ function MainApp({ session }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-function Dashboard({ latestSnap, accounts, snapshots }) {
+function Dashboard({ latestSnap, accounts, snapshots, dark }) {
   const assetAccounts = accounts.filter(a => !a.is_debt)
   const debtAccounts  = accounts.filter(a => a.is_debt)
 
@@ -423,10 +423,10 @@ function Dashboard({ latestSnap, accounts, snapshots }) {
                   <stop offset="95%" stopColor={THEME} stopOpacity={0.03} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <CartesianGrid vertical={false} stroke={dark ? '#2e2b24' : '#f3f4f6'} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: dark ? '#9a9489' : '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis hide domain={['auto', 'auto']} />
-              <Tooltip formatter={v => fmt(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} />
+              <Tooltip formatter={v => fmt(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }} />
               <Area type="monotone" dataKey="netWorth" stroke={THEME} strokeWidth={2} fill="url(#nwGrad)"
                 dot={(props) => {
                   const isLast = props.index === netWorthHistory.length - 1
@@ -516,7 +516,7 @@ function Dashboard({ latestSnap, accounts, snapshots }) {
 
 // ── Snapshots ─────────────────────────────────────────────────────────────────
 
-function Snapshots({ snapshots, accounts, onRefresh, filter }) {
+function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
   const [showForm, setShowForm] = useState(false)
   const [showManager, setShowManager] = useState(false)
 
@@ -577,7 +577,7 @@ function Snapshots({ snapshots, accounts, onRefresh, filter }) {
                         interval="preserveStartEnd"
                       />
                       <YAxis hide domain={['auto', 'auto']} />
-                      <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12 }} />
+                      <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -807,7 +807,7 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
 
 // ── Investments ───────────────────────────────────────────────────────────────
 
-function Investments({ investments, invTypes, latestSnap, onRefresh }) {
+function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
   const [showForm, setShowForm] = useState(false)
   const [showManager, setShowManager] = useState(false)
 
@@ -852,11 +852,11 @@ function Investments({ investments, invTypes, latestSnap, onRefresh }) {
           <p className="text-sm font-semibold text-gray-900 mb-3">Monthly Contributions</p>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={monthlyChartData} barSize={14}>
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: dark ? '#9a9489' : '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis hide />
               <Tooltip
                 formatter={(v, name) => [fmt(v), invTypes.find(t => t.key === name)?.label || name]}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }}
               />
               {invTypes.map(t => (
                 <Bar key={t.key} dataKey={t.key} stackId="a" fill={t.color} />
