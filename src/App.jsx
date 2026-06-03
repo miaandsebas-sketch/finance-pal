@@ -240,7 +240,7 @@ function MainApp({ session }) {
         ) : tab === 'debts' ? (
           <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="debts" />
         ) : tab === 'investments' ? (
-          <Investments investments={investments} onRefresh={fetchAll} />
+          <Investments investments={investments} latestSnap={latestSnap} onRefresh={fetchAll} />
         ) : (
           <HomeImprovement items={homeItems} onRefresh={fetchAll} device={device} />
         )}
@@ -784,7 +784,7 @@ const INV_TYPES = [
   { key: 'ibkr_sebastian', label: 'IBKR — Sebastian', emoji: '📈', color: '#6366f1' },
 ]
 
-function Investments({ investments, onRefresh }) {
+function Investments({ investments, latestSnap, onRefresh }) {
   const [showForm, setShowForm] = useState(false)
 
   const byType = {}
@@ -848,12 +848,38 @@ function Investments({ investments, onRefresh }) {
       {INV_TYPES.map(type => {
         const items = byType[type.key]
         const total = items.reduce((s, i) => s + parseFloat(i.amount), 0)
+        const isGold = type.key === 'gold'
+        const currentValue = isGold ? parseFloat(latestSnap['gold']?.amount ?? NaN) : NaN
+        const hasCurrentValue = isGold && !isNaN(currentValue)
+        const gainLoss = hasCurrentValue ? currentValue - total : NaN
         return (
           <div key={type.key} className="bg-white rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-              <span className="font-semibold text-gray-800">{type.emoji} {type.label}</span>
-              <span className="text-sm font-medium text-teal-700">Total Invested {fmtDec(total)}</span>
-            </div>
+            {isGold ? (
+              <div className="px-4 py-3 border-b border-gray-50">
+                <span className="font-semibold text-gray-800 block mb-2">{type.emoji} {type.label}</span>
+                <div className="flex gap-4">
+                  <div>
+                    <p className="text-[0.65rem] text-gray-400 mb-0.5">Paid</p>
+                    <p className="text-sm font-semibold text-gray-800">{fmtDec(total)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[0.65rem] text-gray-400 mb-0.5">Current Value</p>
+                    <p className="text-sm font-semibold text-gray-800">{hasCurrentValue ? fmtDec(currentValue) : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[0.65rem] text-gray-400 mb-0.5">Gain / Loss</p>
+                    <p className={`text-sm font-semibold ${!hasCurrentValue ? 'text-gray-400' : gainLoss >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {hasCurrentValue ? (gainLoss >= 0 ? '+' : '') + fmtDec(gainLoss) : '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+                <span className="font-semibold text-gray-800">{type.emoji} {type.label}</span>
+                <span className="text-sm font-medium text-teal-700">Total Invested {fmtDec(total)}</span>
+              </div>
+            )}
             {items.length === 0 ? (
               <p className="px-4 py-3 text-sm text-gray-300">No purchases yet</p>
             ) : (
