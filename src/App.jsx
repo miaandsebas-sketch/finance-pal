@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, Settings, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
+import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid } from 'recharts'
 
 const THEME = '#0f766e'
@@ -505,19 +505,20 @@ function Snapshots({ snapshots, accounts, onRefresh, filter }) {
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-base font-semibold text-gray-900">{isDebtsPage ? 'Debts' : 'Accounts'}</h2>
         <div className="flex items-center gap-3">
-          <button onClick={() => setShowManager(true)} className="text-gray-400 active:text-gray-600">
-            <Settings size={16} />
+          <button onClick={() => setShowManager(true)}
+            className="flex items-center gap-1 text-sm font-medium text-gray-400 active:text-gray-600">
+            <Plus size={14} /> {isDebtsPage ? 'Debt' : 'Account'}
           </button>
           <button onClick={() => setShowForm(true)}
             className="flex items-center gap-1 text-sm font-medium text-teal-700 active:opacity-70">
-            <Plus size={16} /> Add
+            Record Balances
           </button>
         </div>
       </div>
 
       {visibleAccounts.length === 0 ? (
         <p className="text-center text-sm text-gray-400 py-8">
-          No {isDebtsPage ? 'debts' : 'accounts'} yet — tap the settings icon to add one.
+          No {isDebtsPage ? 'debts' : 'accounts'} yet — tap <span className="font-medium">+ {isDebtsPage ? 'Debt' : 'Account'}</span> to add one.
         </p>
       ) : (
         <div className="space-y-3">
