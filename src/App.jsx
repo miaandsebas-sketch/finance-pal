@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
+import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus, DollarSign } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid } from 'recharts'
 
 const THEME = '#0f766e'
@@ -222,9 +222,9 @@ function MainApp({ session }) {
         style={{ borderBottom: '1px solid #ede8df', paddingTop: 'max(20px, env(safe-area-inset-top))' }}>
         <div className="max-w-[30rem] mx-auto px-5 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 text-xl"
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
               style={{ backgroundColor: THEME }}>
-              💰
+              <DollarSign size={22} color="white" />
             </div>
             <div>
               <h1 className="text-[1.15rem] font-bold tracking-tight text-gray-900 leading-tight">Finance Pal</h1>
