@@ -56,7 +56,7 @@ function LoginScreen() {
   }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center px-6 bg-teal-50">
+    <div className="min-h-dvh flex items-center justify-center px-6 bg-[#FBF6EE]">
       <form onSubmit={handleLogin} className="bg-white rounded-2xl p-8 w-full max-w-xs shadow-sm">
         <div className="text-3xl text-center mb-1">💰</div>
         <h1 className="text-xl font-bold mb-6 text-center text-gray-900">Finance Pal</h1>
@@ -81,13 +81,13 @@ function LoginScreen() {
 
 function Onboarding({ onSelect }) {
   return (
-    <div className="min-h-dvh bg-teal-50 flex items-center justify-center px-6">
+    <div className="min-h-dvh bg-[#FBF6EE] flex items-center justify-center px-6">
       <div className="bg-white rounded-2xl p-8 w-full max-w-xs text-center shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900 mb-1">Who's using this?</h2>
         <p className="text-sm text-gray-400 mb-6">Personalises your view. You can change this anytime.</p>
         {['Mia', 'Sebastian', 'Shared'].map(name => (
           <button key={name} onClick={() => onSelect(name)}
-            className="w-full py-3 border-2 border-gray-100 rounded-xl font-semibold text-gray-800 mb-3 last:mb-0 active:bg-gray-50">
+            className="w-full py-3 border-2 border-gray-100 rounded-xl font-semibold text-gray-800 mb-3 last:mb-0 active:bg-[#FBF6EE]">
             {name === 'Shared' ? 'Shared (see all)' : name}
           </button>
         ))}
@@ -190,7 +190,7 @@ function MainApp({ session }) {
   ]
 
   return (
-    <div className="min-h-dvh bg-gray-50 flex flex-col">
+    <div className="min-h-dvh bg-[#FBF6EE] flex flex-col">
       <header className="text-white px-5 pb-4 flex items-center justify-between"
         style={{ backgroundColor: THEME, paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
         <div>
@@ -864,7 +864,7 @@ const STATUS_COLORS = {
   'Approved':         'bg-green-50 text-green-700',
   'Rejected':         'bg-red-50 text-red-600',
   'Mothballed':       'bg-gray-100 text-gray-500',
-  'Implemented':      'bg-teal-50 text-teal-700',
+  'Implemented':      'bg-[#FBF6EE] text-teal-700',
   'Blocked':          'bg-orange-50 text-orange-700',
 }
 
