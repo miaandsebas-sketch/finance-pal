@@ -561,7 +561,7 @@ function Snapshots({ snapshots, accounts, onRefresh, filter }) {
       )}
 
       {showForm && <SnapshotForm accounts={visibleAccounts} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
-      {showManager && <AccountManager accounts={accounts} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
+      {showManager && <AccountManager accounts={visibleAccounts} defaultIsDebt={isDebtsPage} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
     </div>
   )
 }
@@ -637,7 +637,7 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
 
 // ── Account Manager ───────────────────────────────────────────────────────────
 
-function AccountManager({ accounts, onClose, onSaved }) {
+function AccountManager({ accounts, onClose, onSaved, defaultIsDebt = false }) {
   const [editing, setEditing] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
 
@@ -674,7 +674,7 @@ function AccountManager({ accounts, onClose, onSaved }) {
 
         <div className="px-5 py-4 border-t border-gray-100">
           {showAdd ? (
-            <AccountForm onClose={() => setShowAdd(false)} onSaved={onSaved} />
+            <AccountForm onClose={() => setShowAdd(false)} onSaved={onSaved} defaultIsDebt={defaultIsDebt} />
           ) : (
             <button onClick={() => setShowAdd(true)}
               className="w-full py-3 rounded-xl border-2 border-dashed border-gray-200 text-sm font-medium text-gray-400 flex items-center justify-center gap-1 active:border-teal-300 active:text-teal-600">
@@ -691,11 +691,11 @@ function AccountManager({ accounts, onClose, onSaved }) {
   )
 }
 
-function AccountForm({ initial, onClose, onSaved }) {
+function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
   const [label, setLabel] = useState(initial?.label ?? '')
   const [owner, setOwner] = useState(initial?.owner ?? 'Both')
   const [goal, setGoal] = useState(initial?.goal ?? '')
-  const [isDebt, setIsDebt] = useState(initial?.is_debt ?? false)
+  const [isDebt, setIsDebt] = useState(initial?.is_debt ?? defaultIsDebt)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
