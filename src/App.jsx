@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2 } from 'lucide-react'
+import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Moon, Sun } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid } from 'recharts'
 
 const THEME = '#0f766e'
@@ -144,6 +144,14 @@ function IdentityPicker({ current, onSelect, onClose }) {
 // ── Main App ──────────────────────────────────────────────────────────────────
 
 function MainApp({ session }) {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
+  function toggleTheme() {
+    const next = !dark
+    setDark(next)
+    document.documentElement.classList.toggle('dark', next)
+    localStorage.setItem('ms-theme', next ? 'dark' : 'light')
+  }
+
   const [device, setDevice] = useState(null)
   const [deviceReady, setDeviceReady] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
@@ -235,11 +243,18 @@ function MainApp({ session }) {
               <p className="text-xs text-gray-400">Mia &amp; Sebastian's finances</p>
             </div>
           </div>
-          <button onClick={() => setShowPicker(true)}
-            className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-sm active:opacity-70"
-            style={{ backgroundColor: `${THEME}1a`, color: THEME }}>
-            {device === 'Shared' ? '★' : (device?.[0] ?? '?').toUpperCase()}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleTheme}
+              className="w-[34px] h-[34px] rounded-full flex items-center justify-center active:opacity-70"
+              style={{ backgroundColor: `${THEME}1a`, color: THEME }}>
+              {dark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button onClick={() => setShowPicker(true)}
+              className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-sm active:opacity-70"
+              style={{ backgroundColor: `${THEME}1a`, color: THEME }}>
+              {device === 'Shared' ? '★' : (device?.[0] ?? '?').toUpperCase()}
+            </button>
+          </div>
         </div>
       </header>
 

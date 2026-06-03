@@ -1,1 +1,18 @@
 @import "tailwindcss";
+
+html.dark { color-scheme: dark; }
+html.dark .bg-white { background-color: #242019; }
+html.dark .bg-\[#FBF6EE\] { background-color: #1a1713; }
+html.dark .bg-gray-50 { background-color: #1a1713; }
+html.dark .bg-gray-100 { background-color: #2e2b24; }
+html.dark .text-gray-900 { color: #f0ece4; }
+html.dark .text-gray-800 { color: #e5e0d7; }
+html.dark .text-gray-600 { color: #c2bdb5; }
+html.dark .text-gray-400 { color: #9a9489; }
+html.dark .text-gray-300 { color: #7a7568; }
+html.dark .border-gray-100 { border-color: #2e2b24; }
+html.dark .border-gray-200 { border-color: #3a3730; }
+html.dark .border-gray-300 { border-color: #4a4740; }
+html.dark .divide-gray-50 > * + * { border-color: #2a2720; }
+html.dark header { border-bottom-color: #2e2b24 !important; }
+html.dark nav { border-top-color: #2e2b24 !important; }
