@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
 import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, Settings, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid } from 'recharts'
 
 const THEME = '#0f766e'
 const APP_DEVICE_KEY = 'finance-pal-device'
@@ -315,6 +315,18 @@ function Dashboard({ latestSnap, accounts, snapshots }) {
   })
   Object.entries(byKey).forEach(([k, arr]) => { if (arr.length >= 2) prevSnapByKey[k] = arr.at(-2) })
 
+  const hasPrevAssets = assetAccounts.some(a => prevSnapByKey[a.key])
+  const prevTotalAssets = hasPrevAssets ? assetAccounts.reduce((s, a) => s + (prevSnapByKey[a.key] ? parseFloat(prevSnapByKey[a.key].amount) : 0), 0) : null
+  const assetsPct = prevTotalAssets != null && prevTotalAssets !== 0 ? ((totalAssets - prevTotalAssets) / Math.abs(prevTotalAssets)) * 100 : null
+
+  const hasPrevDebt = debtAccounts.some(a => prevSnapByKey[a.key])
+  const prevTotalDebt = hasPrevDebt ? debtAccounts.reduce((s, a) => s + (prevSnapByKey[a.key] ? parseFloat(prevSnapByKey[a.key].amount) : 0), 0) : null
+  const debtPct = prevTotalDebt != null && prevTotalDebt !== 0 ? ((totalDebt - prevTotalDebt) / Math.abs(prevTotalDebt)) * 100 : null
+
+  const lastUpdatedDate = snapshots.length > 0
+    ? snapshots.reduce((max, s) => s.snapshot_date > max ? s.snapshot_date : max, '')
+    : null
+
   const goalAccounts = accounts.filter(a => a.goal && !a.is_debt)
 
   function Trend({ current, previous, isDebt }) {
@@ -338,47 +350,62 @@ function Dashboard({ latestSnap, accounts, snapshots }) {
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: 'Net Worth',     value: netWorth,    diff: nwDiff,    pct: nwDiffPct, isDebt: false, accent: true },
-          { label: 'Total Assets',  value: totalAssets, diff: null,       pct: null,      isDebt: false },
-          { label: 'Total Debt',    value: totalDebt,   diff: null,       pct: null,      isDebt: true  },
-          { label: 'Accounts',      value: null,        diff: null,       pct: null,      count: accounts.length },
-        ].map(card => (
-          <div key={card.label} className={`rounded-2xl p-4 ${card.accent ? 'text-white' : 'bg-white'}`}
-            style={card.accent ? { backgroundColor: THEME } : {}}>
-            <p className={`text-xs font-medium mb-1 ${card.accent ? 'text-white/70' : 'text-gray-400'}`}>{card.label}</p>
-            {card.count != null ? (
-              <p className="text-2xl font-bold text-gray-900">{card.count}</p>
-            ) : (
-              <p className={`text-xl font-bold leading-tight ${card.accent ? 'text-white' : card.isDebt ? 'text-red-500' : 'text-gray-900'}`}>
-                {fmt(card.value)}
-              </p>
-            )}
-            {card.pct != null && (
-              <span className={`flex items-center gap-0.5 text-xs mt-1 font-medium ${card.pct >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
-                {card.pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-                {Math.abs(card.pct).toFixed(1)}% vs prev
-              </span>
-            )}
-          </div>
-        ))}
+          { label: 'Net Worth',    value: netWorth,    pct: nwDiffPct, isDebt: false, accent: true },
+          { label: 'Total Assets', value: totalAssets, pct: assetsPct, isDebt: false },
+          { label: 'Total Debt',   value: totalDebt,   pct: debtPct,   isDebt: true  },
+          { label: 'Last Updated', value: null,        pct: null,      date: lastUpdatedDate },
+        ].map(card => {
+          const trendGood = card.isDebt ? card.pct < 0 : card.pct >= 0
+          return (
+            <div key={card.label} className={`rounded-2xl p-4 ${card.accent ? 'text-white' : 'bg-white'}`}
+              style={card.accent ? { backgroundColor: THEME } : {}}>
+              <p className={`text-xs font-medium mb-1 ${card.accent ? 'text-white/70' : 'text-gray-400'}`}>{card.label}</p>
+              {'date' in card ? (
+                <p className="text-sm font-bold leading-tight text-gray-900">{card.date ? fmtDate(card.date, true) : '—'}</p>
+              ) : (
+                <p className={`text-xl font-bold leading-tight ${card.accent ? 'text-white' : card.isDebt ? 'text-red-500' : 'text-gray-900'}`}>
+                  {fmt(card.value)}
+                </p>
+              )}
+              {card.pct != null && (
+                <span className={`flex items-center gap-0.5 text-xs mt-1 font-medium ${
+                  card.accent
+                    ? (trendGood ? 'text-emerald-300' : 'text-red-300')
+                    : (trendGood ? 'text-emerald-500' : 'text-red-400')
+                }`}>
+                  {card.pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                  {Math.abs(card.pct).toFixed(1)}% vs prev
+                </span>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Net worth trend chart */}
       {netWorthHistory.length > 1 && (
         <div className="bg-white rounded-2xl p-4">
           <p className="text-sm font-semibold text-gray-900 mb-3">Net Worth Over Time</p>
-          <ResponsiveContainer width="100%" height={140}>
+          <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={netWorthHistory}>
               <defs>
                 <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={THEME} stopOpacity={0.15} />
-                  <stop offset="95%" stopColor={THEME} stopOpacity={0} />
+                  <stop offset="5%"  stopColor={THEME} stopOpacity={0.28} />
+                  <stop offset="95%" stopColor={THEME} stopOpacity={0.03} />
                 </linearGradient>
               </defs>
+              <CartesianGrid vertical={false} stroke="#f3f4f6" />
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis hide domain={['auto', 'auto']} />
               <Tooltip formatter={v => fmt(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} />
-              <Area type="monotone" dataKey="netWorth" stroke={THEME} strokeWidth={2} fill="url(#nwGrad)" dot={false} />
+              <Area type="monotone" dataKey="netWorth" stroke={THEME} strokeWidth={2} fill="url(#nwGrad)"
+                dot={(props) => {
+                  const isLast = props.index === netWorthHistory.length - 1
+                  return isLast
+                    ? <circle key={props.index} cx={props.cx} cy={props.cy} r={4} fill={THEME} stroke="white" strokeWidth={2} />
+                    : <g key={props.index} />
+                }}
+              />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -510,10 +537,15 @@ function Snapshots({ snapshots, accounts, onRefresh, filter }) {
                   </span>
                 </div>
                 {chartData.length > 1 ? (
-                  <ResponsiveContainer width="100%" height={60}>
+                  <ResponsiveContainer width="100%" height={90}>
                     <LineChart data={chartData}>
                       <Line type="monotone" dataKey="amount" stroke={acc.is_debt ? '#ef4444' : THEME} strokeWidth={2} dot={false} />
-                      <XAxis dataKey="label" hide />
+                      <XAxis dataKey="label"
+                        tick={{ fontSize: 9, fill: '#d1d5db' }}
+                        axisLine={false} tickLine={false}
+                        ticks={[chartData[0].label, chartData.at(-1).label]}
+                        interval="preserveStartEnd"
+                      />
                       <YAxis hide domain={['auto', 'auto']} />
                       <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12 }} />
                     </LineChart>
@@ -746,9 +778,9 @@ function AccountForm({ initial, onClose, onSaved }) {
 // ── Investments ───────────────────────────────────────────────────────────────
 
 const INV_TYPES = [
-  { key: 'gold',            label: 'Gold',             emoji: '🪙' },
-  { key: 'ibkr_mingyue',   label: 'IBKR — Mingyue',  emoji: '📈' },
-  { key: 'ibkr_sebastian', label: 'IBKR — Sebastian', emoji: '📈' },
+  { key: 'gold',            label: 'Gold',             emoji: '🪙', color: '#f59e0b' },
+  { key: 'ibkr_mingyue',   label: 'IBKR — Mingyue',  emoji: '📈', color: THEME },
+  { key: 'ibkr_sebastian', label: 'IBKR — Sebastian', emoji: '📈', color: '#6366f1' },
 ]
 
 function Investments({ investments, onRefresh }) {
@@ -758,15 +790,59 @@ function Investments({ investments, onRefresh }) {
   INV_TYPES.forEach(t => { byType[t.key] = [] })
   investments.forEach(inv => { if (byType[inv.inv_type]) byType[inv.inv_type].push(inv) })
 
+  const monthlyMap = {}
+  investments.forEach(inv => {
+    const month = inv.purchase_date.slice(0, 7)
+    if (!monthlyMap[month]) {
+      monthlyMap[month] = { month }
+      INV_TYPES.forEach(t => { monthlyMap[month][t.key] = 0 })
+    }
+    if (monthlyMap[month][inv.inv_type] !== undefined)
+      monthlyMap[month][inv.inv_type] += parseFloat(inv.amount)
+  })
+  const monthlyChartData = Object.values(monthlyMap)
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .map(d => ({
+      ...d,
+      label: new Date(d.month + '-01').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+    }))
+
   return (
     <div className="px-4 pt-4 space-y-4">
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-base font-semibold text-gray-900">Investment Log</h2>
+        <h2 className="text-base font-semibold text-gray-900">Investments</h2>
         <button onClick={() => setShowForm(true)}
           className="flex items-center gap-1 text-sm font-medium text-teal-700 active:opacity-70">
           <Plus size={16} /> Add
         </button>
       </div>
+
+      {monthlyChartData.length > 0 && (
+        <div className="bg-white rounded-2xl p-4">
+          <p className="text-sm font-semibold text-gray-900 mb-3">Monthly Contributions</p>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={monthlyChartData} barSize={14}>
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis hide />
+              <Tooltip
+                formatter={(v, name) => [fmt(v), INV_TYPES.find(t => t.key === name)?.label || name]}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+              />
+              {INV_TYPES.map(t => (
+                <Bar key={t.key} dataKey={t.key} stackId="a" fill={t.color} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="flex flex-wrap gap-3 mt-2">
+            {INV_TYPES.map(t => (
+              <div key={t.key} className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: t.color }} />
+                <span className="text-[0.65rem] text-gray-500">{t.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {INV_TYPES.map(type => {
         const items = byType[type.key]
@@ -775,7 +851,7 @@ function Investments({ investments, onRefresh }) {
           <div key={type.key} className="bg-white rounded-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
               <span className="font-semibold text-gray-800">{type.emoji} {type.label}</span>
-              <span className="text-sm font-medium text-teal-700">Total {fmtDec(total)}</span>
+              <span className="text-sm font-medium text-teal-700">Total Invested {fmtDec(total)}</span>
             </div>
             {items.length === 0 ? (
               <p className="px-4 py-3 text-sm text-gray-300">No purchases yet</p>
@@ -918,20 +994,22 @@ function HomeImprovement({ items, onRefresh, device }) {
         </button>
       </div>
 
+      {items.length === 0 ? (
+        <p className="text-center text-sm text-gray-400 py-8">No items yet — tap Add to get started.</p>
+      ) : null}
+
       {QUADRANTS.map(q => {
         const qItems = items.filter(i => i.urgency === q.urgency && i.importance === q.importance)
+        if (qItems.length === 0) return null
         return (
           <div key={`${q.urgency}-${q.importance}`} className="bg-white rounded-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
               <span className={`text-xs font-bold uppercase tracking-wide ${q.color}`}>{q.label}</span>
               <span className="text-xs text-gray-300">{q.urgency} · {q.importance}</span>
-              {qItems.length > 0 && <span className="ml-auto text-xs text-gray-300">{qItems.length}</span>}
+              <span className="ml-auto text-xs text-gray-300">{qItems.length}</span>
             </div>
-            {qItems.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-300">Nothing here</p>
-            ) : (
-              <div className="divide-y divide-gray-50">
-                {qItems.map(item => (
+            <div className="divide-y divide-gray-50">
+              {qItems.map(item => (
                   <div key={item.id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
@@ -959,8 +1037,7 @@ function HomeImprovement({ items, onRefresh, device }) {
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
+            </div>
           </div>
         )
       })}
