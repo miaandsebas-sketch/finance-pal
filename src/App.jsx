@@ -218,13 +218,23 @@ function MainApp({ session }) {
 
   return (
     <div className="min-h-dvh bg-[#FBF6EE] flex flex-col">
-      <header className="text-white px-5 pb-4 flex items-center justify-between"
-        style={{ backgroundColor: THEME, paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
-        <div>
-          <h1 className="text-[1.15rem] font-semibold tracking-tight">Finance Pal</h1>
+      <header className="bg-[#FBF6EE] sticky top-0 z-20"
+        style={{ borderBottom: '1px solid #ede8df', paddingTop: 'max(20px, env(safe-area-inset-top))' }}>
+        <div className="max-w-[30rem] mx-auto px-5 pb-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 text-xl"
+              style={{ backgroundColor: THEME }}>
+              💰
+            </div>
+            <div>
+              <h1 className="text-[1.15rem] font-bold tracking-tight text-gray-900 leading-tight">Finance Pal</h1>
+              <p className="text-xs text-gray-400">Mia &amp; Sebastian's finances</p>
+            </div>
+          </div>
           <button onClick={() => setShowPicker(true)}
-            className="text-[0.7rem] text-white/60 flex items-center gap-0.5 active:text-white/90">
-            {device} <ChevronDown size={10} />
+            className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-sm active:opacity-70"
+            style={{ backgroundColor: `${THEME}1a`, color: THEME }}>
+            {device === 'Shared' ? '★' : (device?.[0] ?? '?').toUpperCase()}
           </button>
         </div>
       </header>
