@@ -204,6 +204,7 @@ function MainApp({ session }) {
       </header>
 
       <main className="flex-1 overflow-y-auto pb-24">
+        <div className="max-w-[30rem] mx-auto">
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading…</div>
         ) : tab === 'dashboard' ? (
@@ -217,6 +218,7 @@ function MainApp({ session }) {
         ) : (
           <HomeImprovement items={homeItems} onRefresh={fetchAll} device={device} />
         )}
+        </div>
       </main>
 
       <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-100 flex"
