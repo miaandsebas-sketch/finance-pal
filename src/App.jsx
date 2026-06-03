@@ -560,7 +560,7 @@ function Snapshots({ snapshots, accounts, onRefresh, filter }) {
         </div>
       )}
 
-      {showForm && <SnapshotForm accounts={accounts} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
+      {showForm && <SnapshotForm accounts={visibleAccounts} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
       {showManager && <AccountManager accounts={accounts} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
     </div>
   )
