@@ -1,28 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Camera, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown } from 'lucide-react'
+import { LayoutDashboard, Camera, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, Settings } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 const THEME = '#0f766e'
 const APP_DEVICE_KEY = 'finance-pal-device'
-
-const ACCOUNTS = [
-  { key: 'sebastian_ac',        label: 'Sebastian — A/C',         owner: 'Sebastian', goal: 15000 },
-  { key: 'mingyue_ac',          label: 'Mingyue — A/C',           owner: 'Mingyue',   goal: 160000 },
-  { key: 'combined_ac',         label: 'Combined — A/C',          owner: 'Both',      goal: 5000 },
-  { key: 'sebastian_cpf',       label: 'Sebastian — CPF',         owner: 'Sebastian', goal: null },
-  { key: 'mingyue_cpf',         label: 'Mingyue — CPF',           owner: 'Mingyue',   goal: null },
-  { key: 'sebastian_srs',       label: 'Sebastian — SRS',         owner: 'Sebastian', goal: null },
-  { key: 'mingyue_srs',         label: 'Mingyue — SRS',           owner: 'Mingyue',   goal: null },
-  { key: 'sebastian_insurance', label: 'Sebastian — Insurance',   owner: 'Sebastian', goal: null },
-  { key: 'mingyue_td',          label: 'Mingyue — Time Deposit',  owner: 'Mingyue',   goal: null },
-  { key: 'mingyue_ibkr',        label: 'Mingyue — IBKR',         owner: 'Mingyue',   goal: 11000 },
-  { key: 'sebastian_ibkr',      label: 'Sebastian — IBKR',       owner: 'Sebastian', goal: null },
-  { key: 'gold',                label: 'Gold',                    owner: 'Both',      goal: 8000 },
-  { key: 'housing_loan',        label: 'Housing Loan',            owner: 'Both',      goal: null, isDebt: true },
-]
-
-const ASSET_KEYS = ACCOUNTS.filter(a => !a.isDebt).map(a => a.key)
 
 const fmt = n => n == null ? '—' : '$' + Math.round(n).toLocaleString()
 const fmtDec = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -130,6 +112,7 @@ function MainApp({ session }) {
   const [showPicker, setShowPicker] = useState(false)
   const [tab, setTab] = useState('dashboard')
 
+  const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
   const [investments, setInvestments] = useState([])
   const [homeItems, setHomeItems] = useState([])
@@ -154,11 +137,13 @@ function MainApp({ session }) {
   }
 
   const fetchAll = useCallback(async () => {
-    const [{ data: snaps }, { data: invs }, { data: home }] = await Promise.all([
+    const [{ data: accs }, { data: snaps }, { data: invs }, { data: home }] = await Promise.all([
+      supabase.from('user_accounts').select('*').is('archived_at', null).order('sort_order'),
       supabase.from('account_snapshots').select('*').order('snapshot_date', { ascending: true }),
       supabase.from('investment_purchases').select('*').order('purchase_date', { ascending: false }),
       supabase.from('home_improvement_items').select('*').order('created_at', { ascending: true }),
     ])
+    setAccounts(accs || [])
     setSnapshots(snaps || [])
     setInvestments(invs || [])
     setHomeItems(home || [])
@@ -168,6 +153,7 @@ function MainApp({ session }) {
   useEffect(() => {
     fetchAll()
     const channel = supabase.channel('finance-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_accounts' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'account_snapshots' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'investment_purchases' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'home_improvement_items' }, fetchAll)
@@ -180,16 +166,16 @@ function MainApp({ session }) {
 
   const latestSnap = {}
   snapshots.forEach(s => {
-    if (!latestSnap[s.account_key] || s.snapshot_date > latestSnap[s.account_key].snapshot_date) {
-      latestSnap[s.account_key] = s
+    if (!latestSnap[s.account_id] || s.snapshot_date > latestSnap[s.account_id].snapshot_date) {
+      latestSnap[s.account_id] = s
     }
   })
 
   const tabs = [
-    { id: 'dashboard',   label: 'Overview',     icon: LayoutDashboard },
-    { id: 'snapshots',   label: 'Snapshots',    icon: Camera },
-    { id: 'investments', label: 'Investments',  icon: TrendingUp },
-    { id: 'home',        label: 'Home',         icon: Hammer },
+    { id: 'dashboard',   label: 'Overview',    icon: LayoutDashboard },
+    { id: 'snapshots',   label: 'Snapshots',   icon: Camera },
+    { id: 'investments', label: 'Investments', icon: TrendingUp },
+    { id: 'home',        label: 'Home',        icon: Hammer },
   ]
 
   return (
@@ -209,9 +195,9 @@ function MainApp({ session }) {
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading…</div>
         ) : tab === 'dashboard' ? (
-          <Dashboard latestSnap={latestSnap} />
+          <Dashboard latestSnap={latestSnap} accounts={accounts} />
         ) : tab === 'snapshots' ? (
-          <Snapshots snapshots={snapshots} onRefresh={fetchAll} />
+          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} />
         ) : tab === 'investments' ? (
           <Investments investments={investments} onRefresh={fetchAll} />
         ) : (
@@ -243,13 +229,19 @@ function MainApp({ session }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-function Dashboard({ latestSnap }) {
-  const totalAssets = ASSET_KEYS.reduce((sum, key) => {
-    const s = latestSnap[key]
+function Dashboard({ latestSnap, accounts }) {
+  const assetAccounts = accounts.filter(a => !a.is_debt)
+  const debtAccounts = accounts.filter(a => a.is_debt)
+
+  const totalAssets = assetAccounts.reduce((sum, acc) => {
+    const s = latestSnap[acc.id]
     return sum + (s ? parseFloat(s.amount) : 0)
   }, 0)
-  const housingLoan = latestSnap['housing_loan'] ? parseFloat(latestSnap['housing_loan'].amount) : 0
-  const netWorth = totalAssets - housingLoan
+  const totalDebt = debtAccounts.reduce((sum, acc) => {
+    const s = latestSnap[acc.id]
+    return sum + (s ? parseFloat(s.amount) : 0)
+  }, 0)
+  const netWorth = totalAssets - totalDebt
 
   return (
     <div className="px-4 pt-4 space-y-4">
@@ -258,78 +250,90 @@ function Dashboard({ latestSnap }) {
         <p className="text-3xl font-bold">{fmt(netWorth)}</p>
         <div className="mt-3 flex gap-4 text-xs text-white/70">
           <span>Assets {fmt(totalAssets)}</span>
-          <span>Debt {fmt(housingLoan)}</span>
+          <span>Debt {fmt(totalDebt)}</span>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl divide-y divide-gray-50">
-        {ACCOUNTS.map(acc => {
-          const snap = latestSnap[acc.key]
-          const amount = snap ? parseFloat(snap.amount) : null
-          const progress = acc.goal && amount != null ? Math.min(amount / acc.goal, 1) : null
-          return (
-            <div key={acc.key} className="px-4 py-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-gray-700">{acc.label}</span>
-                <span className={`text-sm font-semibold ${acc.isDebt ? 'text-red-600' : 'text-gray-900'}`}>
-                  {fmtDec(amount)}
-                </span>
-              </div>
-              {acc.goal && (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all"
-                      style={{ width: `${progress != null ? (progress * 100).toFixed(1) : 0}%`, backgroundColor: THEME }} />
-                  </div>
-                  <span className="text-[0.65rem] text-gray-400 shrink-0">
-                    {progress != null ? `${Math.round(progress * 100)}%` : '—'} of {fmt(acc.goal)}
+      {accounts.length === 0 ? (
+        <p className="text-center text-sm text-gray-400 py-8">No accounts yet — add one in the Snapshots tab.</p>
+      ) : (
+        <div className="bg-white rounded-2xl divide-y divide-gray-50">
+          {accounts.map(acc => {
+            const snap = latestSnap[acc.id]
+            const amount = snap ? parseFloat(snap.amount) : null
+            const progress = acc.goal && amount != null ? Math.min(amount / acc.goal, 1) : null
+            return (
+              <div key={acc.id} className="px-4 py-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-gray-700">{acc.label}</span>
+                  <span className={`text-sm font-semibold ${acc.is_debt ? 'text-red-600' : 'text-gray-900'}`}>
+                    {fmtDec(amount)}
                   </span>
                 </div>
-              )}
-              {snap && (
-                <p className="text-[0.65rem] text-gray-300 mt-0.5">
-                  as of {new Date(snap.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </p>
-              )}
-            </div>
-          )
-        })}
-      </div>
+                {acc.goal && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all"
+                        style={{ width: `${progress != null ? (progress * 100).toFixed(1) : 0}%`, backgroundColor: THEME }} />
+                    </div>
+                    <span className="text-[0.65rem] text-gray-400 shrink-0">
+                      {progress != null ? `${Math.round(progress * 100)}%` : '—'} of {fmt(acc.goal)}
+                    </span>
+                  </div>
+                )}
+                {snap && (
+                  <p className="text-[0.65rem] text-gray-300 mt-0.5">
+                    as of {new Date(snap.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Snapshots ─────────────────────────────────────────────────────────────────
 
-function Snapshots({ snapshots, onRefresh }) {
+function Snapshots({ snapshots, accounts, onRefresh }) {
   const [showForm, setShowForm] = useState(false)
+  const [showManager, setShowManager] = useState(false)
 
-  const snapshotsByKey = {}
+  const snapshotsByAccount = {}
   snapshots.forEach(s => {
-    if (!snapshotsByKey[s.account_key]) snapshotsByKey[s.account_key] = []
-    snapshotsByKey[s.account_key].push(s)
+    if (!snapshotsByAccount[s.account_id]) snapshotsByAccount[s.account_id] = []
+    snapshotsByAccount[s.account_id].push(s)
   })
 
   return (
     <div className="px-4 pt-4 space-y-3">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-base font-semibold text-gray-900">Balance Snapshots</h2>
-        <button onClick={() => setShowForm(true)}
-          className="flex items-center gap-1 text-sm font-medium text-teal-700 active:opacity-70">
-          <Plus size={16} /> Add
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowManager(true)}
+            className="text-gray-400 active:text-gray-600">
+            <Settings size={16} />
+          </button>
+          <button onClick={() => setShowForm(true)}
+            className="flex items-center gap-1 text-sm font-medium text-teal-700 active:opacity-70">
+            <Plus size={16} /> Add
+          </button>
+        </div>
       </div>
 
-      {ACCOUNTS.map(acc => {
-        const history = snapshotsByKey[acc.key] || []
+      {accounts.length === 0 ? (
+        <p className="text-center text-sm text-gray-400 py-8">No accounts yet — tap the settings icon to add one.</p>
+      ) : accounts.map(acc => {
+        const history = snapshotsByAccount[acc.id] || []
         const chartData = history.map(s => ({
-          date: s.snapshot_date,
           amount: parseFloat(s.amount),
           label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
         }))
         const latest = history[history.length - 1]
         return (
-          <div key={acc.key} className="bg-white rounded-2xl p-4">
+          <div key={acc.id} className="bg-white rounded-2xl p-4">
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm font-medium text-gray-800">{acc.label}</span>
               <span className="text-sm font-semibold text-gray-900">{latest ? fmtDec(parseFloat(latest.amount)) : '—'}</span>
@@ -350,12 +354,13 @@ function Snapshots({ snapshots, onRefresh }) {
         )
       })}
 
-      {showForm && <SnapshotForm onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
+      {showForm && <SnapshotForm accounts={accounts} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
+      {showManager && <AccountManager accounts={accounts} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
     </div>
   )
 }
 
-function SnapshotForm({ onClose, onSaved }) {
+function SnapshotForm({ accounts, onClose, onSaved }) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [amounts, setAmounts] = useState({})
   const [saving, setSaving] = useState(false)
@@ -368,13 +373,13 @@ function SnapshotForm({ onClose, onSaved }) {
     setSaving(true)
     const { data: hh } = await supabase.from('household_members').select('household_id').single()
     if (!hh) { setError('Household not found — check your Supabase setup'); setSaving(false); return }
-    const rows = entries.map(([key, val]) => ({
+    const rows = entries.map(([id, val]) => ({
       household_id: hh.household_id,
-      account_key: key,
+      account_id: id,
       amount: parseFloat(val),
       snapshot_date: date,
     }))
-    const { error: err } = await supabase.from('account_snapshots').upsert(rows, { onConflict: 'household_id,account_key,snapshot_date' })
+    const { error: err } = await supabase.from('account_snapshots').upsert(rows, { onConflict: 'household_id,account_id,snapshot_date' })
     if (err) { setError(err.message); setSaving(false); return }
     onSaved()
   }
@@ -394,12 +399,12 @@ function SnapshotForm({ onClose, onSaved }) {
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
               style={{ fontSize: 16 }} />
           </div>
-          {ACCOUNTS.map(acc => (
-            <div key={acc.key}>
+          {accounts.map(acc => (
+            <div key={acc.id}>
               <label className="text-xs text-gray-500 font-medium">{acc.label}</label>
               <input type="number" step="0.01" placeholder="Leave blank to skip"
-                value={amounts[acc.key] ?? ''}
-                onChange={e => setAmounts(prev => ({ ...prev, [acc.key]: e.target.value }))}
+                value={amounts[acc.id] ?? ''}
+                onChange={e => setAmounts(prev => ({ ...prev, [acc.id]: e.target.value }))}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
                 style={{ fontSize: 16 }} />
             </div>
@@ -409,6 +414,145 @@ function SnapshotForm({ onClose, onSaved }) {
             className="w-full py-3 rounded-xl font-semibold text-white disabled:opacity-50"
             style={{ backgroundColor: THEME }}>
             {saving ? 'Saving…' : 'Save Snapshot'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Account Manager ───────────────────────────────────────────────────────────
+
+function AccountManager({ accounts, onClose, onSaved }) {
+  const [editing, setEditing] = useState(null)
+  const [showAdd, setShowAdd] = useState(false)
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90dvh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Manage Accounts</h3>
+          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
+        </div>
+
+        <div className="divide-y divide-gray-50">
+          {accounts.map(acc => (
+            <div key={acc.id} className="px-5 py-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900">{acc.label}</p>
+                <p className="text-xs text-gray-400">
+                  {acc.owner}{acc.goal ? ` · Goal ${fmt(acc.goal)}` : ''}{acc.is_debt ? ' · Debt' : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => setEditing(acc)}
+                  className="text-xs text-teal-600 font-medium active:opacity-60">Edit</button>
+                <button onClick={async () => {
+                  if (!confirm(`Remove "${acc.label}"? Past snapshots are kept.`)) return
+                  await supabase.from('user_accounts').update({ archived_at: new Date().toISOString() }).eq('id', acc.id)
+                  onSaved()
+                }} className="text-xs text-red-400 font-medium active:opacity-60">Remove</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-100">
+          {showAdd ? (
+            <AccountForm onClose={() => setShowAdd(false)} onSaved={onSaved} />
+          ) : (
+            <button onClick={() => setShowAdd(true)}
+              className="w-full py-3 rounded-xl border-2 border-dashed border-gray-200 text-sm font-medium text-gray-400 flex items-center justify-center gap-1 active:border-teal-300 active:text-teal-600">
+              <Plus size={16} /> Add account
+            </button>
+          )}
+        </div>
+      </div>
+
+      {editing && (
+        <AccountForm initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); onSaved() }} />
+      )}
+    </div>
+  )
+}
+
+function AccountForm({ initial, onClose, onSaved }) {
+  const [label, setLabel] = useState(initial?.label ?? '')
+  const [owner, setOwner] = useState(initial?.owner ?? 'Both')
+  const [goal, setGoal] = useState(initial?.goal ?? '')
+  const [isDebt, setIsDebt] = useState(initial?.is_debt ?? false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave(e) {
+    e.preventDefault()
+    if (!label.trim()) { setError('Label is required'); return }
+    setSaving(true)
+    const payload = {
+      label: label.trim(),
+      owner,
+      goal: goal !== '' ? parseFloat(goal) : null,
+      is_debt: isDebt,
+    }
+    let err
+    if (initial) {
+      ;({ error: err } = await supabase.from('user_accounts').update(payload).eq('id', initial.id))
+    } else {
+      const { data: hh } = await supabase.from('household_members').select('household_id').single()
+      if (!hh) { setError('Household not found'); setSaving(false); return }
+      const { data: maxOrder } = await supabase.from('user_accounts').select('sort_order').order('sort_order', { ascending: false }).limit(1).single()
+      ;({ error: err } = await supabase.from('user_accounts').insert({
+        ...payload,
+        household_id: hh.household_id,
+        sort_order: (maxOrder?.sort_order ?? 0) + 1,
+      }))
+    }
+    if (err) { setError(err.message); setSaving(false); return }
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md"
+        onClick={e => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">{initial ? 'Edit Account' : 'New Account'}</h3>
+          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-3">
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Label</label>
+            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Mingyue — DBS"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
+              style={{ fontSize: 16 }} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Owner</label>
+            <select value={owner} onChange={e => setOwner(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500 bg-white"
+              style={{ fontSize: 16 }}>
+              {['Sebastian', 'Mingyue', 'Both'].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Goal (SGD) — optional</label>
+            <input type="number" step="1" placeholder="e.g. 20000" value={goal} onChange={e => setGoal(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
+              style={{ fontSize: 16 }} />
+          </div>
+          <label className="flex items-center gap-3 py-1 cursor-pointer">
+            <div onClick={() => setIsDebt(v => !v)}
+              className={`w-10 h-6 rounded-full transition-colors relative ${isDebt ? 'bg-red-400' : 'bg-gray-200'}`}>
+              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${isDebt ? 'left-5' : 'left-1'}`} />
+            </div>
+            <span className="text-sm text-gray-700">This is a debt / liability</span>
+          </label>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <button type="submit" disabled={saving}
+            className="w-full py-3 rounded-xl font-semibold text-white disabled:opacity-50"
+            style={{ backgroundColor: THEME }}>
+            {saving ? 'Saving…' : initial ? 'Save Changes' : 'Add Account'}
           </button>
         </form>
       </div>
@@ -678,9 +822,7 @@ function HomeItemForm({ initial, device, onClose, onSaved, onDeleted }) {
       description: description.trim() || null,
       proposer: proposer || null,
       approver: approver || null,
-      status,
-      urgency,
-      importance,
+      status, urgency, importance,
       funded_by: fundedBy || null,
       estimated_budget: budget ? parseFloat(budget) : null,
       remarks: remarks.trim() || null,
