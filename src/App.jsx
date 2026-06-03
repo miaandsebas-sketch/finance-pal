@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Camera, TrendingUp, Hammer, LogOut, X, Plus, ExternalLink, ChevronDown } from 'lucide-react'
+import { LayoutDashboard, Camera, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 const THEME = '#0f766e'
@@ -203,9 +203,6 @@ function MainApp({ session }) {
             {device} <ChevronDown size={10} />
           </button>
         </div>
-        <button onClick={() => supabase.auth.signOut()} className="text-white/60 active:text-white p-1">
-          <LogOut size={18} />
-        </button>
       </header>
 
       <main className="flex-1 overflow-y-auto pb-24">
