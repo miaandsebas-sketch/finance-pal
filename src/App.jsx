@@ -8,6 +8,11 @@ const APP_DEVICE_KEY = 'finance-pal-device'
 
 const fmt = n => n == null ? '—' : '$' + Math.round(n).toLocaleString()
 const fmtDec = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const fmtDate = (dateStr, withYear = false) =>
+  new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', withYear
+    ? { day: 'numeric', month: 'short', year: 'numeric' }
+    : { day: 'numeric', month: 'short' }
+  )
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -269,7 +274,7 @@ function Dashboard({ latestSnap, accounts, snapshots }) {
       else assets += parseFloat(snap.amount)
     })
     return {
-      label: new Date(date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
+      label: fmtDate(date),
       netWorth: assets - debt,
     }
   })
@@ -410,7 +415,7 @@ function Dashboard({ latestSnap, accounts, snapshots }) {
                         <p className="text-sm text-gray-800">{acc.label}</p>
                         {snap && (
                           <p className="text-[0.65rem] text-gray-300">
-                            {new Date(snap.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {fmtDate(snap.snapshot_date, true)}
                           </p>
                         )}
                       </div>
@@ -472,7 +477,7 @@ function Snapshots({ snapshots, accounts, onRefresh, filter }) {
             const history = snapshotsByAccount[acc.key] || []
             const chartData = history.map(s => ({
               amount: parseFloat(s.amount),
-              label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
+              label: fmtDate(s.snapshot_date),
             }))
             const latest = history[history.length - 1]
             return (
@@ -760,7 +765,7 @@ function Investments({ investments, onRefresh }) {
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800">{fmtDec(parseFloat(inv.amount))}</p>
                       <p className="text-xs text-gray-400">
-                        {new Date(inv.purchase_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {fmtDate(inv.purchase_date, true)}
                       </p>
                       {inv.url && (
                         <a href={inv.url} target="_blank" rel="noreferrer"
