@@ -166,8 +166,8 @@ function MainApp({ session }) {
 
   const latestSnap = {}
   snapshots.forEach(s => {
-    if (!latestSnap[s.account_id] || s.snapshot_date > latestSnap[s.account_id].snapshot_date) {
-      latestSnap[s.account_id] = s
+    if (!latestSnap[s.account_key] || s.snapshot_date > latestSnap[s.account_key].snapshot_date) {
+      latestSnap[s.account_key] = s
     }
   })
 
@@ -234,11 +234,11 @@ function Dashboard({ latestSnap, accounts }) {
   const debtAccounts = accounts.filter(a => a.is_debt)
 
   const totalAssets = assetAccounts.reduce((sum, acc) => {
-    const s = latestSnap[acc.id]
+    const s = latestSnap[acc.key]
     return sum + (s ? parseFloat(s.amount) : 0)
   }, 0)
   const totalDebt = debtAccounts.reduce((sum, acc) => {
-    const s = latestSnap[acc.id]
+    const s = latestSnap[acc.key]
     return sum + (s ? parseFloat(s.amount) : 0)
   }, 0)
   const netWorth = totalAssets - totalDebt
@@ -259,11 +259,11 @@ function Dashboard({ latestSnap, accounts }) {
       ) : (
         <div className="bg-white rounded-2xl divide-y divide-gray-50">
           {accounts.map(acc => {
-            const snap = latestSnap[acc.id]
+            const snap = latestSnap[acc.key]
             const amount = snap ? parseFloat(snap.amount) : null
             const progress = acc.goal && amount != null ? Math.min(amount / acc.goal, 1) : null
             return (
-              <div key={acc.id} className="px-4 py-3">
+              <div key={acc.key} className="px-4 py-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm text-gray-700">{acc.label}</span>
                   <span className={`text-sm font-semibold ${acc.is_debt ? 'text-red-600' : 'text-gray-900'}`}>
@@ -303,8 +303,8 @@ function Snapshots({ snapshots, accounts, onRefresh }) {
 
   const snapshotsByAccount = {}
   snapshots.forEach(s => {
-    if (!snapshotsByAccount[s.account_id]) snapshotsByAccount[s.account_id] = []
-    snapshotsByAccount[s.account_id].push(s)
+    if (!snapshotsByAccount[s.account_key]) snapshotsByAccount[s.account_key] = []
+    snapshotsByAccount[s.account_key].push(s)
   })
 
   return (
@@ -326,7 +326,7 @@ function Snapshots({ snapshots, accounts, onRefresh }) {
       {accounts.length === 0 ? (
         <p className="text-center text-sm text-gray-400 py-8">No accounts yet — tap the settings icon to add one.</p>
       ) : accounts.map(acc => {
-        const history = snapshotsByAccount[acc.id] || []
+        const history = snapshotsByAccount[acc.key] || []
         const chartData = history.map(s => ({
           amount: parseFloat(s.amount),
           label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
@@ -373,13 +373,13 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
     setSaving(true)
     const { data: hh } = await supabase.from('household_members').select('household_id').single()
     if (!hh) { setError('Household not found — check your Supabase setup'); setSaving(false); return }
-    const rows = entries.map(([id, val]) => ({
+    const rows = entries.map(([key, val]) => ({
       household_id: hh.household_id,
-      account_id: id,
+      account_key: key,
       amount: parseFloat(val),
       snapshot_date: date,
     }))
-    const { error: err } = await supabase.from('account_snapshots').upsert(rows, { onConflict: 'household_id,account_id,snapshot_date' })
+    const { error: err } = await supabase.from('account_snapshots').upsert(rows, { onConflict: 'household_id,account_key,snapshot_date' })
     if (err) { setError(err.message); setSaving(false); return }
     onSaved()
   }
@@ -400,11 +400,11 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
               style={{ fontSize: 16 }} />
           </div>
           {accounts.map(acc => (
-            <div key={acc.id}>
+            <div key={acc.key}>
               <label className="text-xs text-gray-500 font-medium">{acc.label}</label>
               <input type="number" step="0.01" placeholder="Leave blank to skip"
-                value={amounts[acc.id] ?? ''}
-                onChange={e => setAmounts(prev => ({ ...prev, [acc.id]: e.target.value }))}
+                value={amounts[acc.key] ?? ''}
+                onChange={e => setAmounts(prev => ({ ...prev, [acc.key]: e.target.value }))}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
                 style={{ fontSize: 16 }} />
             </div>
@@ -502,8 +502,10 @@ function AccountForm({ initial, onClose, onSaved }) {
       const { data: hh } = await supabase.from('household_members').select('household_id').single()
       if (!hh) { setError('Household not found'); setSaving(false); return }
       const { data: maxOrder } = await supabase.from('user_accounts').select('sort_order').order('sort_order', { ascending: false }).limit(1).single()
+      const key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now()
       ;({ error: err } = await supabase.from('user_accounts').insert({
         ...payload,
+        key,
         household_id: hh.household_id,
         sort_order: (maxOrder?.sort_order ?? 0) + 1,
       }))
