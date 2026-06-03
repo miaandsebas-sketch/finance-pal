@@ -14,6 +14,27 @@ const fmtDate = (dateStr, withYear = false) =>
     : { day: 'numeric', month: 'short' }
   )
 
+// Displays/accepts DD/MM/YYYY; stores value as YYYY-MM-DD
+function DateInput({ value, onChange, className, style }) {
+  const toDisplay = v => v ? v.split('-').reverse().join('/') : ''
+  const [text, setText] = useState(toDisplay(value))
+
+  useEffect(() => { setText(toDisplay(value)) }, [value])
+
+  function handleChange(e) {
+    const raw = e.target.value
+    setText(raw)
+    const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    if (m) onChange(`${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`)
+  }
+
+  return (
+    <input type="text" value={text} onChange={handleChange}
+      onBlur={() => setText(toDisplay(value))}
+      placeholder="DD/MM/YYYY" className={className} style={style} />
+  )
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -547,7 +568,7 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
         <form onSubmit={handleSave} className="p-5 space-y-3">
           <div>
             <label className="text-xs text-gray-500 font-medium">Date</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            <DateInput value={date} onChange={setDate}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
               style={{ fontSize: 16 }} />
           </div>
@@ -837,7 +858,7 @@ function InvestmentForm({ onClose, onSaved }) {
           </div>
           <div>
             <label className="text-xs text-gray-500 font-medium">Date</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            <DateInput value={date} onChange={setDate}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
               style={{ fontSize: 16 }} />
           </div>
