@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus, DollarSign } from 'lucide-react'
+import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid } from 'recharts'
 
 const THEME = '#0f766e'
@@ -152,6 +152,7 @@ function MainApp({ session }) {
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
   const [investments, setInvestments] = useState([])
+  const [invTypes, setInvTypes] = useState([])
   const [homeItems, setHomeItems] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -174,15 +175,17 @@ function MainApp({ session }) {
   }
 
   const fetchAll = useCallback(async () => {
-    const [{ data: accs }, { data: snaps }, { data: invs }, { data: home }] = await Promise.all([
+    const [{ data: accs }, { data: snaps }, { data: invs }, { data: types }, { data: home }] = await Promise.all([
       supabase.from('user_accounts').select('*').is('archived_at', null).order('sort_order'),
       supabase.from('account_snapshots').select('*').order('snapshot_date', { ascending: true }),
       supabase.from('investment_purchases').select('*').order('purchase_date', { ascending: false }),
+      supabase.from('investment_types').select('*').order('sort_order'),
       supabase.from('home_improvement_items').select('*').order('created_at', { ascending: true }),
     ])
     setAccounts(accs || [])
     setSnapshots(snaps || [])
     setInvestments(invs || [])
+    setInvTypes(types || [])
     setHomeItems(home || [])
     setLoading(false)
   }, [])
@@ -193,6 +196,7 @@ function MainApp({ session }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_accounts' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'account_snapshots' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'investment_purchases' }, fetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'investment_types' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'home_improvement_items' }, fetchAll)
       .subscribe()
     return () => supabase.removeChannel(channel)
@@ -250,7 +254,7 @@ function MainApp({ session }) {
         ) : tab === 'debts' ? (
           <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="debts" />
         ) : tab === 'investments' ? (
-          <Investments investments={investments} latestSnap={latestSnap} onRefresh={fetchAll} />
+          <Investments investments={investments} invTypes={invTypes} latestSnap={latestSnap} onRefresh={fetchAll} />
         ) : (
           <HomeImprovement items={homeItems} onRefresh={fetchAll} device={device} />
         )}
@@ -788,17 +792,12 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
 
 // ── Investments ───────────────────────────────────────────────────────────────
 
-const INV_TYPES = [
-  { key: 'gold',            label: 'Gold',             emoji: '🪙', color: '#f59e0b' },
-  { key: 'ibkr_mingyue',   label: 'IBKR — Mingyue',  emoji: '📈', color: THEME },
-  { key: 'ibkr_sebastian', label: 'IBKR — Sebastian', emoji: '📈', color: '#6366f1' },
-]
-
-function Investments({ investments, latestSnap, onRefresh }) {
+function Investments({ investments, invTypes, latestSnap, onRefresh }) {
   const [showForm, setShowForm] = useState(false)
+  const [showManager, setShowManager] = useState(false)
 
   const byType = {}
-  INV_TYPES.forEach(t => { byType[t.key] = [] })
+  invTypes.forEach(t => { byType[t.key] = [] })
   investments.forEach(inv => { if (byType[inv.inv_type]) byType[inv.inv_type].push(inv) })
 
   const monthlyMap = {}
@@ -806,7 +805,7 @@ function Investments({ investments, latestSnap, onRefresh }) {
     const month = inv.purchase_date.slice(0, 7)
     if (!monthlyMap[month]) {
       monthlyMap[month] = { month }
-      INV_TYPES.forEach(t => { monthlyMap[month][t.key] = 0 })
+      invTypes.forEach(t => { monthlyMap[month][t.key] = 0 })
     }
     if (monthlyMap[month][inv.inv_type] !== undefined)
       monthlyMap[month][inv.inv_type] += parseFloat(inv.amount)
@@ -822,10 +821,15 @@ function Investments({ investments, latestSnap, onRefresh }) {
     <div className="px-4 pt-4 space-y-4">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-base font-semibold text-gray-900">Investments</h2>
-        <button onClick={() => setShowForm(true)}
-          className="flex items-center gap-1 text-sm font-medium text-teal-700 active:opacity-70">
-          <Plus size={16} /> Add
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowManager(true)} className="text-gray-400 active:text-gray-600 p-1">
+            <Settings2 size={16} />
+          </button>
+          <button onClick={() => setShowForm(true)}
+            className="flex items-center gap-1 text-sm font-medium text-teal-700 active:opacity-70">
+            <Plus size={16} /> Add
+          </button>
+        </div>
       </div>
 
       {monthlyChartData.length > 0 && (
@@ -836,16 +840,16 @@ function Investments({ investments, latestSnap, onRefresh }) {
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis hide />
               <Tooltip
-                formatter={(v, name) => [fmt(v), INV_TYPES.find(t => t.key === name)?.label || name]}
+                formatter={(v, name) => [fmt(v), invTypes.find(t => t.key === name)?.label || name]}
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
               />
-              {INV_TYPES.map(t => (
+              {invTypes.map(t => (
                 <Bar key={t.key} dataKey={t.key} stackId="a" fill={t.color} />
               ))}
             </BarChart>
           </ResponsiveContainer>
           <div className="flex flex-wrap gap-3 mt-2">
-            {INV_TYPES.map(t => (
+            {invTypes.map(t => (
               <div key={t.key} className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: t.color }} />
                 <span className="text-[0.65rem] text-gray-500">{t.label}</span>
@@ -922,13 +926,14 @@ function Investments({ investments, latestSnap, onRefresh }) {
         )
       })}
 
-      {showForm && <InvestmentForm onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
+      {showForm && <InvestmentForm invTypes={invTypes} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
+      {showManager && <InvestmentTypeManager invTypes={invTypes} investments={investments} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
     </div>
   )
 }
 
-function InvestmentForm({ onClose, onSaved }) {
-  const [type, setType] = useState('gold')
+function InvestmentForm({ invTypes, onClose, onSaved }) {
+  const [type, setType] = useState(() => invTypes[0]?.key ?? '')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [amount, setAmount] = useState('')
   const [url, setUrl] = useState('')
@@ -966,7 +971,7 @@ function InvestmentForm({ onClose, onSaved }) {
             <select value={type} onChange={e => setType(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500 bg-white"
               style={{ fontSize: 16 }}>
-              {INV_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+              {invTypes.map(t => <option key={t.key} value={t.key}>{t.emoji} {t.label}</option>)}
             </select>
           </div>
           <div>
@@ -994,6 +999,123 @@ function InvestmentForm({ onClose, onSaved }) {
             {saving ? 'Saving…' : 'Save'}
           </button>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function InvestmentTypeManager({ invTypes, investments, onClose, onSaved }) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [label, setLabel] = useState('')
+  const [emoji, setEmoji] = useState('📈')
+  const [color, setColor] = useState('#6366f1')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const PRESET_COLORS = ['#f59e0b', '#0f766e', '#6366f1', '#10b981', '#ef4444', '#8b5cf6', '#f97316', '#06b6d4']
+
+  async function handleAdd(e) {
+    e.preventDefault()
+    if (!label.trim()) return
+    const key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+    setSaving(true)
+    setError('')
+    const { data: hh } = await supabase.from('household_members').select('household_id').single()
+    const nextOrder = invTypes.length > 0 ? Math.max(...invTypes.map(t => t.sort_order)) + 1 : 1
+    const { error: err } = await supabase.from('investment_types').insert({
+      household_id: hh.household_id,
+      key,
+      label: label.trim(),
+      emoji,
+      color,
+      sort_order: nextOrder,
+    })
+    if (err) { setError(err.message); setSaving(false); return }
+    setSaving(false)
+    onSaved()
+  }
+
+  async function handleDelete(type) {
+    await supabase.from('investment_types').delete().eq('id', type.id)
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[80vh] flex flex-col"
+        onClick={e => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between shrink-0">
+          <h3 className="font-semibold text-gray-900">Investment Types</h3>
+          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          <div className="divide-y divide-gray-50">
+            {invTypes.map(type => {
+              const hasPurchases = investments.some(i => i.inv_type === type.key)
+              return (
+                <div key={type.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: type.color }} />
+                    <span className="text-sm text-gray-800">{type.emoji} {type.label}</span>
+                  </div>
+                  <button
+                    onClick={() => !hasPurchases && handleDelete(type)}
+                    disabled={hasPurchases}
+                    className={`text-xs px-2.5 py-1 rounded-lg ${hasPurchases ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 active:text-red-600'}`}
+                    title={hasPurchases ? 'Has purchases — cannot delete' : 'Delete'}>
+                    {hasPurchases ? 'Has purchases' : 'Delete'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          {!showAdd ? (
+            <button onClick={() => setShowAdd(true)}
+              className="w-full px-5 py-3 text-sm font-medium text-teal-700 text-left flex items-center gap-1.5 active:opacity-70">
+              <Plus size={14} /> Add type
+            </button>
+          ) : (
+            <form onSubmit={handleAdd} className="px-5 py-4 space-y-3 border-t border-gray-50">
+              <div className="flex gap-2">
+                <div className="w-16 shrink-0">
+                  <label className="text-xs text-gray-500 font-medium">Emoji</label>
+                  <input value={emoji} onChange={e => setEmoji(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-2 py-2 mt-1 outline-none focus:border-teal-500 text-center"
+                    style={{ fontSize: 20 }} />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 font-medium">Label</label>
+                  <input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. REITs"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
+                    style={{ fontSize: 16 }} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium block mb-1.5">Colour</label>
+                <div className="flex gap-2 flex-wrap">
+                  {PRESET_COLORS.map(c => (
+                    <button key={c} type="button" onClick={() => setColor(c)}
+                      className={`w-7 h-7 rounded-full transition-transform ${color === c ? 'scale-125 ring-2 ring-offset-1 ring-gray-300' : ''}`}
+                      style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setShowAdd(false); setError('') }}
+                  className="flex-1 py-2.5 rounded-xl font-semibold text-gray-500 bg-gray-100 active:opacity-70">
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving || !label.trim()}
+                  className="flex-1 py-2.5 rounded-xl font-semibold text-white disabled:opacity-50"
+                  style={{ backgroundColor: THEME }}>
+                  {saving ? 'Saving…' : 'Add'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   )
