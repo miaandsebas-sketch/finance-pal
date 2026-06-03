@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Camera, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, Settings } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { LayoutDashboard, Camera, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, Settings, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
 
 const THEME = '#0f766e'
 const APP_DEVICE_KEY = 'finance-pal-device'
@@ -206,7 +206,7 @@ function MainApp({ session }) {
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading…</div>
         ) : tab === 'dashboard' ? (
-          <Dashboard latestSnap={latestSnap} accounts={accounts} />
+          <Dashboard latestSnap={latestSnap} accounts={accounts} snapshots={snapshots} />
         ) : tab === 'snapshots' ? (
           <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} />
         ) : tab === 'investments' ? (
@@ -240,67 +240,188 @@ function MainApp({ session }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-function Dashboard({ latestSnap, accounts }) {
+function Dashboard({ latestSnap, accounts, snapshots }) {
   const assetAccounts = accounts.filter(a => !a.is_debt)
-  const debtAccounts = accounts.filter(a => a.is_debt)
+  const debtAccounts  = accounts.filter(a => a.is_debt)
 
-  const totalAssets = assetAccounts.reduce((sum, acc) => {
-    const s = latestSnap[acc.key]
-    return sum + (s ? parseFloat(s.amount) : 0)
-  }, 0)
-  const totalDebt = debtAccounts.reduce((sum, acc) => {
-    const s = latestSnap[acc.key]
-    return sum + (s ? parseFloat(s.amount) : 0)
-  }, 0)
-  const netWorth = totalAssets - totalDebt
+  const totalAssets = assetAccounts.reduce((s, a) => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
+  const totalDebt   = debtAccounts.reduce((s, a)  => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
+  const netWorth    = totalAssets - totalDebt
+
+  // Net worth history — one point per snapshot date, forward-filling missing accounts
+  const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort()
+  const netWorthHistory = dates.map(date => {
+    const relevant = {}
+    snapshots.filter(s => s.snapshot_date <= date).forEach(s => {
+      if (!relevant[s.account_key] || s.snapshot_date > relevant[s.account_key].snapshot_date)
+        relevant[s.account_key] = s
+    })
+    let assets = 0, debt = 0
+    accounts.forEach(acc => {
+      const snap = relevant[acc.key]
+      if (!snap) return
+      if (acc.is_debt) debt += parseFloat(snap.amount)
+      else assets += parseFloat(snap.amount)
+    })
+    return {
+      label: new Date(date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
+      netWorth: assets - debt,
+    }
+  })
+
+  // Trend vs previous snapshot date
+  const prev = netWorthHistory.at(-2)
+  const curr = netWorthHistory.at(-1)
+  const nwDiff   = curr && prev ? curr.netWorth - prev.netWorth : null
+  const nwDiffPct = nwDiff != null && prev?.netWorth ? (nwDiff / Math.abs(prev.netWorth)) * 100 : null
+
+  // Per-account previous snapshot for trend arrows
+  const prevSnapByKey = {}
+  const byKey = {}
+  ;[...snapshots].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date)).forEach(s => {
+    byKey[s.account_key] = byKey[s.account_key] || []
+    byKey[s.account_key].push(s)
+  })
+  Object.entries(byKey).forEach(([k, arr]) => { if (arr.length >= 2) prevSnapByKey[k] = arr.at(-2) })
+
+  const goalAccounts = accounts.filter(a => a.goal && !a.is_debt)
+
+  function Trend({ current, previous, isDebt }) {
+    if (current == null || previous == null) return <span className="text-gray-300 text-xs">—</span>
+    const diff = current - previous
+    if (diff === 0) return <span className="flex items-center gap-0.5 text-xs text-gray-400"><Minus size={12} /> 0%</span>
+    const pct = Math.abs(diff / previous * 100).toFixed(1)
+    // For debts, going down is good (green); for assets, going up is good (green)
+    const positive = isDebt ? diff < 0 : diff > 0
+    return (
+      <span className={`flex items-center gap-0.5 text-xs font-medium ${positive ? 'text-emerald-500' : 'text-red-400'}`}>
+        {diff > 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+        {pct}%
+      </span>
+    )
+  }
 
   return (
-    <div className="px-4 pt-4 space-y-4">
-      <div className="rounded-2xl p-5 text-white" style={{ backgroundColor: THEME }}>
-        <p className="text-white/70 text-xs font-medium uppercase tracking-wide mb-1">Net Worth</p>
-        <p className="text-3xl font-bold">{fmt(netWorth)}</p>
-        <div className="mt-3 flex gap-4 text-xs text-white/70">
-          <span>Assets {fmt(totalAssets)}</span>
-          <span>Debt {fmt(totalDebt)}</span>
-        </div>
+    <div className="px-4 pt-4 pb-2 space-y-4">
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { label: 'Net Worth',     value: netWorth,    diff: nwDiff,    pct: nwDiffPct, isDebt: false, accent: true },
+          { label: 'Total Assets',  value: totalAssets, diff: null,       pct: null,      isDebt: false },
+          { label: 'Total Debt',    value: totalDebt,   diff: null,       pct: null,      isDebt: true  },
+          { label: 'Accounts',      value: null,        diff: null,       pct: null,      count: accounts.length },
+        ].map(card => (
+          <div key={card.label} className={`rounded-2xl p-4 ${card.accent ? 'text-white' : 'bg-white'}`}
+            style={card.accent ? { backgroundColor: THEME } : {}}>
+            <p className={`text-xs font-medium mb-1 ${card.accent ? 'text-white/70' : 'text-gray-400'}`}>{card.label}</p>
+            {card.count != null ? (
+              <p className="text-2xl font-bold text-gray-900">{card.count}</p>
+            ) : (
+              <p className={`text-xl font-bold leading-tight ${card.accent ? 'text-white' : card.isDebt ? 'text-red-500' : 'text-gray-900'}`}>
+                {fmt(card.value)}
+              </p>
+            )}
+            {card.pct != null && (
+              <span className={`flex items-center gap-0.5 text-xs mt-1 font-medium ${card.pct >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                {card.pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                {Math.abs(card.pct).toFixed(1)}% vs prev
+              </span>
+            )}
+          </div>
+        ))}
       </div>
 
+      {/* Net worth trend chart */}
+      {netWorthHistory.length > 1 && (
+        <div className="bg-white rounded-2xl p-4">
+          <p className="text-sm font-semibold text-gray-900 mb-3">Net Worth Over Time</p>
+          <ResponsiveContainer width="100%" height={140}>
+            <AreaChart data={netWorthHistory}>
+              <defs>
+                <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={THEME} stopOpacity={0.15} />
+                  <stop offset="95%" stopColor={THEME} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis hide domain={['auto', 'auto']} />
+              <Tooltip formatter={v => fmt(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} />
+              <Area type="monotone" dataKey="netWorth" stroke={THEME} strokeWidth={2} fill="url(#nwGrad)" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Goals progress */}
+      {goalAccounts.length > 0 && (
+        <div className="bg-white rounded-2xl p-4">
+          <p className="text-sm font-semibold text-gray-900 mb-3">Goals</p>
+          <div className="space-y-3">
+            {goalAccounts.map(acc => {
+              const amount = latestSnap[acc.key] ? parseFloat(latestSnap[acc.key].amount) : 0
+              const progress = Math.min(amount / acc.goal, 1)
+              const pct = Math.round(progress * 100)
+              return (
+                <div key={acc.key}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-700">{acc.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">{fmtDec(amount)} / {fmt(acc.goal)}</span>
+                      <span className="text-xs font-semibold text-gray-700">{pct}%</span>
+                    </div>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#10b981' : THEME }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Account list */}
       {accounts.length === 0 ? (
         <p className="text-center text-sm text-gray-400 py-8">No accounts yet — add one in the Snapshots tab.</p>
       ) : (
-        <div className="bg-white rounded-2xl divide-y divide-gray-50">
-          {accounts.map(acc => {
-            const snap = latestSnap[acc.key]
-            const amount = snap ? parseFloat(snap.amount) : null
-            const progress = acc.goal && amount != null ? Math.min(amount / acc.goal, 1) : null
-            return (
-              <div key={acc.key} className="px-4 py-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-gray-700">{acc.label}</span>
-                  <span className={`text-sm font-semibold ${acc.is_debt ? 'text-red-600' : 'text-gray-900'}`}>
-                    {fmtDec(amount)}
-                  </span>
-                </div>
-                {acc.goal && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all"
-                        style={{ width: `${progress != null ? (progress * 100).toFixed(1) : 0}%`, backgroundColor: THEME }} />
+        <>
+          {[
+            { heading: 'Assets', items: assetAccounts },
+            { heading: 'Debts',  items: debtAccounts  },
+          ].filter(g => g.items.length > 0).map(group => (
+            <div key={group.heading} className="bg-white rounded-2xl overflow-hidden">
+              <p className="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">{group.heading}</p>
+              <div className="divide-y divide-gray-50">
+                {group.items.map(acc => {
+                  const snap = latestSnap[acc.key]
+                  const prev = prevSnapByKey[acc.key]
+                  const amount = snap ? parseFloat(snap.amount) : null
+                  const prevAmount = prev ? parseFloat(prev.amount) : null
+                  return (
+                    <div key={acc.key} className="px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-800">{acc.label}</p>
+                        {snap && (
+                          <p className="text-[0.65rem] text-gray-300">
+                            {new Date(snap.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-sm font-semibold ${acc.is_debt ? 'text-red-500' : 'text-gray-900'}`}>
+                          {fmtDec(amount)}
+                        </p>
+                        <Trend current={amount} previous={prevAmount} isDebt={acc.is_debt} />
+                      </div>
                     </div>
-                    <span className="text-[0.65rem] text-gray-400 shrink-0">
-                      {progress != null ? `${Math.round(progress * 100)}%` : '—'} of {fmt(acc.goal)}
-                    </span>
-                  </div>
-                )}
-                {snap && (
-                  <p className="text-[0.65rem] text-gray-300 mt-0.5">
-                    as of {new Date(snap.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </p>
-                )}
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
+            </div>
+          ))}
+        </>
       )}
     </div>
   )
