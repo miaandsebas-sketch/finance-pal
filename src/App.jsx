@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Camera, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, Settings, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
+import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, Settings, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
 
 const THEME = '#0f766e'
@@ -183,10 +183,11 @@ function MainApp({ session }) {
   })
 
   const tabs = [
-    { id: 'dashboard',   label: 'Overview',    icon: LayoutDashboard },
-    { id: 'snapshots',   label: 'Snapshots',   icon: Camera },
-    { id: 'investments', label: 'Investments', icon: TrendingUp },
-    { id: 'home',        label: 'Home',        icon: Hammer },
+    { id: 'dashboard',   label: 'Overview', icon: LayoutDashboard },
+    { id: 'accounts',    label: 'Accounts', icon: Wallet },
+    { id: 'debts',       label: 'Debts',    icon: CreditCard },
+    { id: 'investments', label: 'Invest',   icon: TrendingUp },
+    { id: 'home',        label: 'Home',     icon: Hammer },
   ]
 
   return (
@@ -207,8 +208,10 @@ function MainApp({ session }) {
           <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading…</div>
         ) : tab === 'dashboard' ? (
           <Dashboard latestSnap={latestSnap} accounts={accounts} snapshots={snapshots} />
-        ) : tab === 'snapshots' ? (
-          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} />
+        ) : tab === 'accounts' ? (
+          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="assets" />
+        ) : tab === 'debts' ? (
+          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="debts" />
         ) : tab === 'investments' ? (
           <Investments investments={investments} onRefresh={fetchAll} />
         ) : (
@@ -429,9 +432,12 @@ function Dashboard({ latestSnap, accounts, snapshots }) {
 
 // ── Snapshots ─────────────────────────────────────────────────────────────────
 
-function Snapshots({ snapshots, accounts, onRefresh }) {
+function Snapshots({ snapshots, accounts, onRefresh, filter }) {
   const [showForm, setShowForm] = useState(false)
   const [showManager, setShowManager] = useState(false)
+
+  const isDebtsPage = filter === 'debts'
+  const visibleAccounts = accounts.filter(a => isDebtsPage ? a.is_debt : !a.is_debt)
 
   const snapshotsByAccount = {}
   snapshots.forEach(s => {
@@ -442,10 +448,9 @@ function Snapshots({ snapshots, accounts, onRefresh }) {
   return (
     <div className="px-4 pt-4 space-y-3">
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-base font-semibold text-gray-900">Balance Snapshots</h2>
+        <h2 className="text-base font-semibold text-gray-900">{isDebtsPage ? 'Debts' : 'Accounts'}</h2>
         <div className="flex items-center gap-3">
-          <button onClick={() => setShowManager(true)}
-            className="text-gray-400 active:text-gray-600">
+          <button onClick={() => setShowManager(true)} className="text-gray-400 active:text-gray-600">
             <Settings size={16} />
           </button>
           <button onClick={() => setShowForm(true)}
@@ -455,48 +460,44 @@ function Snapshots({ snapshots, accounts, onRefresh }) {
         </div>
       </div>
 
-      {accounts.length === 0 ? (
-        <p className="text-center text-sm text-gray-400 py-8">No accounts yet — tap the settings icon to add one.</p>
-      ) : [
-        { label: 'Assets', items: accounts.filter(a => !a.is_debt) },
-        { label: 'Debts', items: accounts.filter(a => a.is_debt) },
-      ].filter(g => g.items.length > 0).map(group => (
-        <div key={group.label}>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">{group.label}</p>
-          <div className="space-y-3">
-            {group.items.map(acc => {
-              const history = snapshotsByAccount[acc.key] || []
-              const chartData = history.map(s => ({
-                amount: parseFloat(s.amount),
-                label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
-              }))
-              const latest = history[history.length - 1]
-              return (
-                <div key={acc.key} className="bg-white rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-800">{acc.label}</span>
-                    <span className={`text-sm font-semibold ${acc.is_debt ? 'text-red-600' : 'text-gray-900'}`}>
-                      {latest ? fmtDec(parseFloat(latest.amount)) : '—'}
-                    </span>
-                  </div>
-                  {chartData.length > 1 ? (
-                    <ResponsiveContainer width="100%" height={60}>
-                      <LineChart data={chartData}>
-                        <Line type="monotone" dataKey="amount" stroke={acc.is_debt ? '#ef4444' : THEME} strokeWidth={2} dot={false} />
-                        <XAxis dataKey="label" hide />
-                        <YAxis hide domain={['auto', 'auto']} />
-                        <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <p className="text-xs text-gray-300 mt-1">{chartData.length === 1 ? 'Add more snapshots to see a chart' : 'No data yet'}</p>
-                  )}
+      {visibleAccounts.length === 0 ? (
+        <p className="text-center text-sm text-gray-400 py-8">
+          No {isDebtsPage ? 'debts' : 'accounts'} yet — tap the settings icon to add one.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {visibleAccounts.map(acc => {
+            const history = snapshotsByAccount[acc.key] || []
+            const chartData = history.map(s => ({
+              amount: parseFloat(s.amount),
+              label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
+            }))
+            const latest = history[history.length - 1]
+            return (
+              <div key={acc.key} className="bg-white rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-gray-800">{acc.label}</span>
+                  <span className={`text-sm font-semibold ${acc.is_debt ? 'text-red-600' : 'text-gray-900'}`}>
+                    {latest ? fmtDec(parseFloat(latest.amount)) : '—'}
+                  </span>
                 </div>
-              )
-            })}
-          </div>
+                {chartData.length > 1 ? (
+                  <ResponsiveContainer width="100%" height={60}>
+                    <LineChart data={chartData}>
+                      <Line type="monotone" dataKey="amount" stroke={acc.is_debt ? '#ef4444' : THEME} strokeWidth={2} dot={false} />
+                      <XAxis dataKey="label" hide />
+                      <YAxis hide domain={['auto', 'auto']} />
+                      <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-xs text-gray-300 mt-1">{chartData.length === 1 ? 'Add more snapshots to see a chart' : 'No data yet'}</p>
+                )}
+              </div>
+            )
+          })}
         </div>
-      ))}
+      )}
 
       {showForm && <SnapshotForm accounts={accounts} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
       {showManager && <AccountManager accounts={accounts} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
