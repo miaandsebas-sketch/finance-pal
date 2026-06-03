@@ -859,7 +859,7 @@ function Investments({ investments, invTypes, latestSnap, onRefresh }) {
         </div>
       )}
 
-      {INV_TYPES.map(type => {
+      {invTypes.map(type => {
         const items = byType[type.key]
         const total = items.reduce((s, i) => s + parseFloat(i.amount), 0)
         const isGold = type.key === 'gold'
