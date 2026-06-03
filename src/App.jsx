@@ -325,34 +325,46 @@ function Snapshots({ snapshots, accounts, onRefresh }) {
 
       {accounts.length === 0 ? (
         <p className="text-center text-sm text-gray-400 py-8">No accounts yet — tap the settings icon to add one.</p>
-      ) : accounts.map(acc => {
-        const history = snapshotsByAccount[acc.key] || []
-        const chartData = history.map(s => ({
-          amount: parseFloat(s.amount),
-          label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
-        }))
-        const latest = history[history.length - 1]
-        return (
-          <div key={acc.id} className="bg-white rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-medium text-gray-800">{acc.label}</span>
-              <span className="text-sm font-semibold text-gray-900">{latest ? fmtDec(parseFloat(latest.amount)) : '—'}</span>
-            </div>
-            {chartData.length > 1 ? (
-              <ResponsiveContainer width="100%" height={60}>
-                <LineChart data={chartData}>
-                  <Line type="monotone" dataKey="amount" stroke={THEME} strokeWidth={2} dot={false} />
-                  <XAxis dataKey="label" hide />
-                  <YAxis hide domain={['auto', 'auto']} />
-                  <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-xs text-gray-300 mt-1">{chartData.length === 1 ? 'Add more snapshots to see a chart' : 'No data yet'}</p>
-            )}
+      ) : [
+        { label: 'Assets', items: accounts.filter(a => !a.is_debt) },
+        { label: 'Debts', items: accounts.filter(a => a.is_debt) },
+      ].filter(g => g.items.length > 0).map(group => (
+        <div key={group.label}>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">{group.label}</p>
+          <div className="space-y-3">
+            {group.items.map(acc => {
+              const history = snapshotsByAccount[acc.key] || []
+              const chartData = history.map(s => ({
+                amount: parseFloat(s.amount),
+                label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short' }),
+              }))
+              const latest = history[history.length - 1]
+              return (
+                <div key={acc.key} className="bg-white rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-800">{acc.label}</span>
+                    <span className={`text-sm font-semibold ${acc.is_debt ? 'text-red-600' : 'text-gray-900'}`}>
+                      {latest ? fmtDec(parseFloat(latest.amount)) : '—'}
+                    </span>
+                  </div>
+                  {chartData.length > 1 ? (
+                    <ResponsiveContainer width="100%" height={60}>
+                      <LineChart data={chartData}>
+                        <Line type="monotone" dataKey="amount" stroke={acc.is_debt ? '#ef4444' : THEME} strokeWidth={2} dot={false} />
+                        <XAxis dataKey="label" hide />
+                        <YAxis hide domain={['auto', 'auto']} />
+                        <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-xs text-gray-300 mt-1">{chartData.length === 1 ? 'Add more snapshots to see a chart' : 'No data yet'}</p>
+                  )}
+                </div>
+              )
+            })}
           </div>
-        )
-      })}
+        </div>
+      ))}
 
       {showForm && <SnapshotForm accounts={accounts} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
       {showManager && <AccountManager accounts={accounts} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
@@ -399,14 +411,22 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
               style={{ fontSize: 16 }} />
           </div>
-          {accounts.map(acc => (
-            <div key={acc.key}>
-              <label className="text-xs text-gray-500 font-medium">{acc.label}</label>
-              <input type="number" step="0.01" placeholder="Leave blank to skip"
-                value={amounts[acc.key] ?? ''}
-                onChange={e => setAmounts(prev => ({ ...prev, [acc.key]: e.target.value }))}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
-                style={{ fontSize: 16 }} />
+          {[
+            { label: 'Assets', items: accounts.filter(a => !a.is_debt) },
+            { label: 'Debts', items: accounts.filter(a => a.is_debt) },
+          ].filter(g => g.items.length > 0).map(group => (
+            <div key={group.label}>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group.label}</p>
+              {group.items.map(acc => (
+                <div key={acc.key} className="mb-3">
+                  <label className="text-xs text-gray-500 font-medium">{acc.label}</label>
+                  <input type="number" step="0.01" placeholder="Leave blank to skip"
+                    value={amounts[acc.key] ?? ''}
+                    onChange={e => setAmounts(prev => ({ ...prev, [acc.key]: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
+                    style={{ fontSize: 16 }} />
+                </div>
+              ))}
             </div>
           ))}
           {error && <p className="text-red-500 text-sm">{error}</p>}
