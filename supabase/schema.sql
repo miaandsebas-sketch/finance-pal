@@ -1,24 +1,5 @@
--- Household scaffold
-create table households (
-  id uuid primary key default gen_random_uuid(),
-  created_at timestamptz default now()
-);
-
-create table household_members (
-  id uuid primary key default gen_random_uuid(),
-  household_id uuid references households(id) on delete cascade,
-  user_id uuid references auth.users(id) on delete cascade,
-  display_name text not null,
-  created_at timestamptz default now()
-);
-
-create or replace function my_household_id()
-returns uuid language sql stable
-as $$ select household_id from household_members where user_id = auth.uid() limit 1 $$;
-
-alter table household_members enable row level security;
-create policy "own row only" on household_members
-  for all using (user_id = auth.uid());
+-- Run this in the existing mia-seb-apps Supabase project.
+-- households, household_members, and my_household_id() already exist — skip them.
 
 -- Account balance snapshots
 -- One row per (household, account_key, date) — upsert-safe via unique constraint
@@ -71,12 +52,3 @@ create table home_improvement_items (
 alter table home_improvement_items enable row level security;
 create policy "household access" on home_improvement_items
   for all using (household_id = my_household_id());
-
--- Seed: one household for Mia & Sebastian
-insert into households (id) values ('00000000-0000-0000-0000-000000000001');
-
--- After signing up both users in Supabase Auth, insert a row for each:
--- insert into household_members (household_id, user_id, display_name)
--- values ('00000000-0000-0000-0000-000000000001', '<sebastian-user-id>', 'Sebastian');
--- insert into household_members (household_id, user_id, display_name)
--- values ('00000000-0000-0000-0000-000000000001', '<mingyue-user-id>', 'Mingyue');
