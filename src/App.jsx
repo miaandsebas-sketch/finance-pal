@@ -944,7 +944,7 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
                       {inv.url && (
                         <a href={inv.url} target="_blank" rel="noreferrer"
                           className="text-xs text-teal-600 flex items-center gap-1 mt-0.5">
-                          Receipt <ExternalLink size={10} />
+                          Link <ExternalLink size={10} />
                         </a>
                       )}
                     </div>
