@@ -668,6 +668,10 @@ function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
                       />
                       <YAxis hide domain={['auto', 'auto']} />
                       <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }} />
+                      {acc.goal > 0 && (
+                        <ReferenceLine y={acc.goal} stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3"
+                          label={{ value: fmt(acc.goal), position: 'insideTopRight', fontSize: 9, fill: '#f59e0b' }} />
+                      )}
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -926,12 +930,17 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
     if (monthlyMap[month][inv.inv_type] !== undefined)
       monthlyMap[month][inv.inv_type] += parseFloat(inv.amount)
   })
+  let cumulative = 0
   const monthlyChartData = Object.values(monthlyMap)
     .sort((a, b) => a.month.localeCompare(b.month))
-    .map(d => ({
-      ...d,
-      label: new Date(d.month + '-01').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
-    }))
+    .map(d => {
+      cumulative += invTypes.reduce((s, t) => s + (d[t.key] || 0), 0)
+      return {
+        ...d,
+        cumulative,
+        label: new Date(d.month + '-01').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+      }
+    })
 
   return (
     <div className="px-4 pt-4 space-y-4">
@@ -952,17 +961,22 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
         <div className="bg-white rounded-2xl p-4">
           <p className="text-sm font-semibold text-gray-900 mb-3">Monthly Contributions</p>
           <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={monthlyChartData} barSize={14}>
+            <ComposedChart data={monthlyChartData} barSize={14}>
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: dark ? '#9a9489' : '#9ca3af' }} axisLine={false} tickLine={false} />
-              <YAxis hide />
+              <YAxis yAxisId="left" hide />
+              <YAxis yAxisId="right" orientation="right" hide />
               <Tooltip
-                formatter={(v, name) => [fmt(v), invTypes.find(t => t.key === name)?.label || name]}
+                formatter={(v, name) => {
+                  if (name === 'cumulative') return [fmt(v), 'Cumulative']
+                  return [fmt(v), invTypes.find(t => t.key === name)?.label || name]
+                }}
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }}
               />
               {invTypes.map(t => (
-                <Bar key={t.key} dataKey={t.key} stackId="a" fill={t.color} />
+                <Bar key={t.key} yAxisId="left" dataKey={t.key} stackId="a" fill={t.color} />
               ))}
-            </BarChart>
+              <Line yAxisId="right" type="monotone" dataKey="cumulative" stroke="#6366f1" strokeWidth={2} dot={false} name="cumulative" />
+            </ComposedChart>
           </ResponsiveContainer>
           <div className="flex flex-wrap gap-3 mt-2">
             {invTypes.map(t => (
@@ -971,6 +985,10 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
                 <span className="text-[0.65rem] text-gray-500">{t.label}</span>
               </div>
             ))}
+            <div className="flex items-center gap-1.5">
+              <span className="w-4 h-0.5 inline-block rounded" style={{ backgroundColor: '#6366f1' }} />
+              <span className="text-[0.65rem] text-gray-500">Cumulative</span>
+            </div>
           </div>
         </div>
       )}
