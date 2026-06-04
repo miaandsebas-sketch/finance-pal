@@ -588,7 +588,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col items-end">
                         <p className={`text-sm font-semibold ${acc.is_debt ? 'text-red-500' : 'text-gray-900'}`}>
                           {fmtDec(amount)}
                         </p>
