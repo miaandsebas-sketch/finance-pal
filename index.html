@@ -11,7 +11,13 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>Finance Pal</title>
-  <script>if(localStorage.getItem('ms-theme')==='dark')document.documentElement.classList.add('dark')</script>
+    <script>
+      (function(){
+        var t=new URLSearchParams(location.search).get('theme'),s=localStorage.getItem('ms-theme');
+        if(t==='dark'||(t===null&&s==='dark'))document.documentElement.classList.add('dark');
+        if(t)localStorage.setItem('ms-theme',t);
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
