@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { pushBack } from './lib/backStack'
 import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Moon, Sun, Pencil, Trash2 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, ComposedChart, ReferenceLine, Cell } from 'recharts'
 
@@ -178,16 +177,6 @@ function MainApp({ session }) {
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [])
-
-  // Android back button
-  const prevTab = useRef('dashboard')
-  useEffect(() => {
-    if (tab !== 'dashboard' && prevTab.current === 'dashboard') pushBack(() => setTab('dashboard'))
-    prevTab.current = tab
-  }, [tab])
-  useEffect(() => {
-    if (showPicker) pushBack(() => setShowPicker(false))
-  }, [showPicker])
 
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
@@ -621,9 +610,6 @@ function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
   const [showForm, setShowForm] = useState(false)
   const [showManager, setShowManager] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState(null)
-  useEffect(() => { if (showForm) pushBack(() => setShowForm(false)) }, [showForm])
-  useEffect(() => { if (showManager) pushBack(() => setShowManager(false)) }, [showManager])
-  useEffect(() => { if (selectedAccount) pushBack(() => setSelectedAccount(null)) }, [!!selectedAccount])
 
   const isDebtsPage = filter === 'debts'
   const visibleAccounts = accounts.filter(a => isDebtsPage ? a.is_debt : !a.is_debt)
@@ -923,8 +909,6 @@ function SnapshotEditForm({ snapshot, account, onClose, onSaved }) {
 function AccountManager({ accounts, onClose, onSaved, defaultIsDebt = false }) {
   const [editing, setEditing] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
-  useEffect(() => { if (editing) pushBack(() => setEditing(null)) }, [!!editing])
-  useEffect(() => { if (showAdd) pushBack(() => setShowAdd(false)) }, [showAdd])
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -1077,8 +1061,6 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
 function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
   const [showForm, setShowForm] = useState(false)
   const [showManager, setShowManager] = useState(false)
-  useEffect(() => { if (showForm) pushBack(() => setShowForm(false)) }, [showForm])
-  useEffect(() => { if (showManager) pushBack(() => setShowManager(false)) }, [showManager])
 
   const byType = {}
   invTypes.forEach(t => { byType[t.key] = [] })
@@ -1304,7 +1286,6 @@ function InvestmentForm({ invTypes, onClose, onSaved }) {
 
 function InvestmentTypeManager({ invTypes, investments, onClose, onSaved }) {
   const [showAdd, setShowAdd] = useState(false)
-  useEffect(() => { if (showAdd) pushBack(() => setShowAdd(false)) }, [showAdd])
   const [label, setLabel] = useState('')
   const [emoji, setEmoji] = useState('📈')
   const [color, setColor] = useState('#6366f1')
@@ -1441,8 +1422,6 @@ const QUADRANTS = [
 function HomeImprovement({ items, onRefresh, device }) {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
-  useEffect(() => { if (showForm) pushBack(() => setShowForm(false)) }, [showForm])
-  useEffect(() => { if (editing) pushBack(() => setEditing(null)) }, [!!editing])
 
   return (
     <div className="px-4 pt-4 space-y-4">
