@@ -158,6 +158,14 @@ function MainApp({ session }) {
   const [deviceReady, setDeviceReady] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [tab, setTab] = useState('dashboard')
+  useEffect(() => {
+    window.parent.postMessage({ type: 'app:tab', home: tab === 'dashboard' }, '*')
+  }, [tab])
+  useEffect(() => {
+    function onMessage(e) { if (e.data?.type === 'app:goHome') setTab('dashboard') }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
