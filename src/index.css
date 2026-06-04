@@ -9,7 +9,7 @@ body {
 
 html.dark { color-scheme: dark; }
 html.dark .bg-white { background-color: #242019; }
-html.dark .bg-\[#FBF6EE\] { background-color: #1a1713; }
+html.dark .bg-\[\#FBF6EE\] { background-color: #1a1713; }
 html.dark .bg-gray-50 { background-color: #1a1713; }
 html.dark .bg-gray-100 { background-color: #2e2b24; }
 html.dark .text-gray-900 { color: #f0ece4; }
