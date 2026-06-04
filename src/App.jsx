@@ -325,11 +325,10 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
   const assetAccounts = accounts.filter(a => !a.is_debt)
   const debtAccounts  = accounts.filter(a => a.is_debt)
 
-  const totalAssets    = assetAccounts.reduce((s, a) => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
-  const totalDebt      = debtAccounts.reduce((s, a)  => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
-  const excludedFromNw = debtAccounts.filter(a => a.exclude_from_nw)
-  const nwDebt         = debtAccounts.filter(a => !a.exclude_from_nw).reduce((s, a) => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
-  const netWorth       = totalAssets - nwDebt
+  const excludedAccounts = accounts.filter(a => a.exclude_from_nw)
+  const totalAssets    = assetAccounts.filter(a => !a.exclude_from_nw).reduce((s, a) => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
+  const totalDebt      = debtAccounts.filter(a => !a.exclude_from_nw).reduce((s, a)  => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
+  const netWorth       = totalAssets - totalDebt
 
   // Net worth history — one point per snapshot date, forward-filling missing accounts
   const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort()
@@ -342,9 +341,9 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
     let assets = 0, debt = 0
     accounts.forEach(acc => {
       const snap = relevant[acc.key]
-      if (!snap) return
+      if (!snap || acc.exclude_from_nw) return
       if (!acc.is_debt) assets += parseFloat(snap.amount)
-      else if (!acc.exclude_from_nw) debt += parseFloat(snap.amount)
+      else debt += parseFloat(snap.amount)
     })
     return {
       label: fmtDate(date),
@@ -374,12 +373,15 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
   })
   Object.entries(byKey).forEach(([k, arr]) => { if (arr.length >= 2) prevSnapByKey[k] = arr.at(-2) })
 
-  const hasPrevAssets = assetAccounts.some(a => prevSnapByKey[a.key])
-  const prevTotalAssets = hasPrevAssets ? assetAccounts.reduce((s, a) => s + (prevSnapByKey[a.key] ? parseFloat(prevSnapByKey[a.key].amount) : 0), 0) : null
+  const includedAssets = assetAccounts.filter(a => !a.exclude_from_nw)
+  const includedDebts  = debtAccounts.filter(a => !a.exclude_from_nw)
+
+  const hasPrevAssets = includedAssets.some(a => prevSnapByKey[a.key])
+  const prevTotalAssets = hasPrevAssets ? includedAssets.reduce((s, a) => s + (prevSnapByKey[a.key] ? parseFloat(prevSnapByKey[a.key].amount) : 0), 0) : null
   const assetsPct = prevTotalAssets != null && prevTotalAssets !== 0 ? ((totalAssets - prevTotalAssets) / Math.abs(prevTotalAssets)) * 100 : null
 
-  const hasPrevDebt = debtAccounts.some(a => prevSnapByKey[a.key])
-  const prevTotalDebt = hasPrevDebt ? debtAccounts.reduce((s, a) => s + (prevSnapByKey[a.key] ? parseFloat(prevSnapByKey[a.key].amount) : 0), 0) : null
+  const hasPrevDebt = includedDebts.some(a => prevSnapByKey[a.key])
+  const prevTotalDebt = hasPrevDebt ? includedDebts.reduce((s, a) => s + (prevSnapByKey[a.key] ? parseFloat(prevSnapByKey[a.key].amount) : 0), 0) : null
   const debtPct = prevTotalDebt != null && prevTotalDebt !== 0 ? ((totalDebt - prevTotalDebt) / Math.abs(prevTotalDebt)) * 100 : null
 
   const lastUpdatedDate = snapshots.length > 0
@@ -409,7 +411,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: 'Net Worth',    value: netWorth,    pct: nwDiffPct, isDebt: false, accent: true, note: excludedFromNw.length > 0 ? `excl. ${excludedFromNw.map(a => a.label).join(', ')}` : null },
+          { label: 'Net Worth',    value: netWorth,    pct: nwDiffPct, isDebt: false, accent: true, note: excludedAccounts.length > 0 ? `excl. ${excludedAccounts.map(a => a.label).join(', ')}` : null },
           { label: 'Total Assets', value: totalAssets, pct: assetsPct, isDebt: false },
           { label: 'Total Debt',   value: totalDebt,   pct: debtPct,   isDebt: true  },
           { label: 'Last Updated', value: null,        pct: null,      date: lastUpdatedDate },
@@ -586,7 +588,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
                           </p>
                         )}
                       </div>
-                      <div className="text-right">
+                      <div className="flex flex-col items-end">
                         <p className={`text-sm font-semibold ${acc.is_debt ? 'text-red-500' : 'text-gray-900'}`}>
                           {fmtDec(amount)}
                         </p>
@@ -978,7 +980,7 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
       owner,
       goal: goal !== '' ? parseFloat(goal) : null,
       is_debt: isDebt,
-      exclude_from_nw: isDebt ? excludeFromNw : false,
+      exclude_from_nw: excludeFromNw,
     }
     let err
     if (initial) {
@@ -1029,21 +1031,19 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
               style={{ fontSize: 16 }} />
           </div>
           <label className="flex items-center gap-3 py-1 cursor-pointer">
-            <div onClick={() => { const next = !isDebt; setIsDebt(next); if (!next) setExcludeFromNw(false) }}
+            <div onClick={() => setIsDebt(v => !v)}
               className={`w-10 h-6 rounded-full transition-colors relative ${isDebt ? 'bg-red-400' : 'bg-gray-200'}`}>
               <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${isDebt ? 'left-5' : 'left-1'}`} />
             </div>
             <span className="text-sm text-gray-700">This is a debt / liability</span>
           </label>
-          {isDebt && (
-            <label className="flex items-center gap-3 py-1 cursor-pointer">
-              <div onClick={() => setExcludeFromNw(v => !v)}
-                className={`w-10 h-6 rounded-full transition-colors relative ${excludeFromNw ? 'bg-teal-500' : 'bg-gray-200'}`}>
-                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${excludeFromNw ? 'left-5' : 'left-1'}`} />
-              </div>
-              <span className="text-sm text-gray-700">Exclude from net worth</span>
-            </label>
-          )}
+          <label className="flex items-center gap-3 py-1 cursor-pointer">
+            <div onClick={() => setExcludeFromNw(v => !v)}
+              className={`w-10 h-6 rounded-full transition-colors relative ${excludeFromNw ? 'bg-teal-500' : 'bg-gray-200'}`}>
+              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${excludeFromNw ? 'left-5' : 'left-1'}`} />
+            </div>
+            <span className="text-sm text-gray-700">Exclude from totals</span>
+          </label>
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={saving}
             className="w-full py-3 rounded-xl font-semibold text-white disabled:opacity-50"
