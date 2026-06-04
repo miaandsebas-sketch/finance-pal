@@ -152,6 +152,7 @@ function MainApp({ session }) {
     localStorage.setItem('ms-theme', next ? 'dark' : 'light')
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.content = next ? '#1a1713' : '#0f766e'
+    window.parent.postMessage({ type: 'app:theme', theme: next ? 'dark' : 'light' }, '*')
   }
 
   const [device, setDevice] = useState(null)
@@ -162,7 +163,17 @@ function MainApp({ session }) {
     window.parent.postMessage({ type: 'app:tab', home: tab === 'dashboard' }, '*')
   }, [tab])
   useEffect(() => {
-    function onMessage(e) { if (e.data?.type === 'app:goHome') setTab('dashboard') }
+    function onMessage(e) {
+      if (e.data?.type === 'app:goHome') setTab('dashboard')
+      if (e.data?.type === 'hub:theme') {
+        const isDark = e.data.theme === 'dark'
+        setDark(isDark)
+        document.documentElement.classList.toggle('dark', isDark)
+        localStorage.setItem('ms-theme', e.data.theme)
+        const meta = document.querySelector('meta[name="theme-color"]')
+        if (meta) meta.content = isDark ? '#1a1713' : '#0f766e'
+      }
+    }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [])

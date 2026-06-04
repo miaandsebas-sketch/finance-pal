@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>Finance Pal</title>
-  <script>(function(){var s=localStorage.getItem('ms-theme');var d=s==='dark'||(s===null&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){document.documentElement.classList.add('dark');document.querySelector('meta[name="theme-color"]').content='#1a1713';}})();</script>
+  <script>(function(){var p=new URLSearchParams(window.location.search).get('theme');var s=p||localStorage.getItem('ms-theme');if(p)localStorage.setItem('ms-theme',p);var d=s==='dark'||(s===null&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){document.documentElement.classList.add('dark');document.querySelector('meta[name="theme-color"]').content='#1a1713';}})();</script>
   </head>
   <body>
     <div id="root"></div>
