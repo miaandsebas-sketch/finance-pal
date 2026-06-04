@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Moon, Sun } from 'lucide-react'
+import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Moon, Sun, Pencil, Trash2 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, ComposedChart, ReferenceLine, Cell } from 'recharts'
 
 const THEME = '#0f766e'
@@ -609,6 +609,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
 function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
   const [showForm, setShowForm] = useState(false)
   const [showManager, setShowManager] = useState(false)
+  const [selectedAccount, setSelectedAccount] = useState(null)
 
   const isDebtsPage = filter === 'debts'
   const visibleAccounts = accounts.filter(a => isDebtsPage ? a.is_debt : !a.is_debt)
@@ -651,7 +652,10 @@ function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
             return (
               <div key={acc.key} className="bg-white rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-800">{acc.label}</span>
+                  <button onClick={() => setSelectedAccount(acc)} className="flex items-center gap-1 active:opacity-70">
+                    <span className="text-sm font-medium text-gray-800">{acc.label}</span>
+                    <ChevronRight size={14} className="text-gray-300" />
+                  </button>
                   <span className={`text-sm font-semibold ${acc.is_debt ? 'text-red-600' : 'text-gray-900'}`}>
                     {latest ? fmtDec(parseFloat(latest.amount)) : '—'}
                   </span>
@@ -685,6 +689,15 @@ function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
 
       {showForm && <SnapshotForm accounts={visibleAccounts} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
       {showManager && <AccountManager accounts={visibleAccounts} defaultIsDebt={isDebtsPage} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
+      {selectedAccount && (
+        <AccountDetailModal
+          account={selectedAccount}
+          snapshots={snapshotsByAccount[selectedAccount.key] || []}
+          onClose={() => setSelectedAccount(null)}
+          onRefresh={onRefresh}
+          dark={dark}
+        />
+      )}
     </div>
   )
 }
@@ -751,6 +764,139 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
             className="w-full py-3 rounded-xl font-semibold text-white disabled:opacity-50"
             style={{ backgroundColor: THEME }}>
             {saving ? 'Saving…' : 'Save Snapshot'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Account Detail ────────────────────────────────────────────────────────────
+
+function AccountDetailModal({ account, snapshots, onClose, onRefresh, dark }) {
+  const [editing, setEditing] = useState(null)
+
+  const sorted = [...snapshots].sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date))
+  const chartData = [...snapshots].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
+    .map(s => ({ amount: parseFloat(s.amount), label: fmtDate(s.snapshot_date) }))
+
+  async function handleDelete(snap) {
+    if (!confirm(`Delete snapshot for ${fmtDate(snap.snapshot_date, true)}?`)) return
+    await supabase.from('account_snapshots').delete().eq('id', snap.id)
+    onRefresh()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85dvh] flex flex-col"
+        onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="font-semibold text-gray-900">{account.label}</h3>
+            <p className="text-xs text-gray-400">{account.owner}{account.is_debt ? ' · Debt' : ''} · {sorted.length} snapshot{sorted.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
+        </div>
+
+        {chartData.length > 1 && (
+          <div className="px-5 pt-4 shrink-0">
+            <ResponsiveContainer width="100%" height={90}>
+              <LineChart data={chartData}>
+                <Line type="monotone" dataKey="amount" stroke={account.is_debt ? '#ef4444' : THEME} strokeWidth={2} dot={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#d1d5db' }} axisLine={false} tickLine={false}
+                  ticks={[chartData[0].label, chartData.at(-1).label]} interval="preserveStartEnd" />
+                <YAxis hide domain={['auto', 'auto']} />
+                <Tooltip formatter={v => fmtDec(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        <div className="overflow-y-auto flex-1">
+          {sorted.length === 0 ? (
+            <p className="text-center text-sm text-gray-400 py-8">No snapshots yet</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {sorted.map(snap => (
+                <div key={snap.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                  <p className="text-sm text-gray-700">{fmtDate(snap.snapshot_date, true)}</p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-sm font-semibold ${account.is_debt ? 'text-red-600' : 'text-gray-900'}`}>
+                      {fmtDec(parseFloat(snap.amount))}
+                    </span>
+                    <button onClick={() => setEditing(snap)} className="text-gray-300 active:text-teal-600 p-1">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => handleDelete(snap)} className="text-gray-300 active:text-red-400 p-1">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {editing && (
+        <SnapshotEditForm
+          snapshot={editing}
+          account={account}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); onRefresh() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function SnapshotEditForm({ snapshot, account, onClose, onSaved }) {
+  const [date, setDate] = useState(snapshot.snapshot_date)
+  const [amount, setAmount] = useState(String(parseFloat(snapshot.amount)))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave(e) {
+    e.preventDefault()
+    if (!amount) { setError('Amount is required'); return }
+    setSaving(true)
+    const { error: err } = await supabase
+      .from('account_snapshots')
+      .update({ amount: parseFloat(amount), snapshot_date: date })
+      .eq('id', snapshot.id)
+    if (err) { setError(err.message); setSaving(false); return }
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md"
+        onClick={e => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">Edit Snapshot</h3>
+            <p className="text-xs text-gray-400">{account.label}</p>
+          </div>
+          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-3">
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Date</label>
+            <DateInput value={date} onChange={setDate}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
+              style={{ fontSize: 16 }} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Amount (SGD)</label>
+            <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
+              style={{ fontSize: 16 }} />
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <button type="submit" disabled={saving}
+            className="w-full py-3 rounded-xl font-semibold text-white disabled:opacity-50"
+            style={{ backgroundColor: THEME }}>
+            {saving ? 'Saving…' : 'Save Changes'}
           </button>
         </form>
       </div>
