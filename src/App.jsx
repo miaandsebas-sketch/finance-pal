@@ -150,6 +150,8 @@ function MainApp({ session }) {
     setDark(next)
     document.documentElement.classList.toggle('dark', next)
     localStorage.setItem('ms-theme', next ? 'dark' : 'light')
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.content = next ? '#1a1713' : '#0f766e'
   }
 
   const [device, setDevice] = useState(null)
