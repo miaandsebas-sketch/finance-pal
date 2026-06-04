@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
 import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Moon, Sun } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, ComposedChart, ReferenceLine, Cell } from 'recharts'
 
 const THEME = '#0f766e'
 const APP_DEVICE_KEY = 'finance-pal-device'
@@ -325,9 +325,11 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
   const assetAccounts = accounts.filter(a => !a.is_debt)
   const debtAccounts  = accounts.filter(a => a.is_debt)
 
-  const totalAssets = assetAccounts.reduce((s, a) => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
-  const totalDebt   = debtAccounts.reduce((s, a)  => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
-  const netWorth    = totalAssets - totalDebt
+  const totalAssets    = assetAccounts.reduce((s, a) => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
+  const totalDebt      = debtAccounts.reduce((s, a)  => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
+  const excludedFromNw = debtAccounts.filter(a => a.exclude_from_nw)
+  const nwDebt         = debtAccounts.filter(a => !a.exclude_from_nw).reduce((s, a) => s + (latestSnap[a.key] ? parseFloat(latestSnap[a.key].amount) : 0), 0)
+  const netWorth       = totalAssets - nwDebt
 
   // Net worth history — one point per snapshot date, forward-filling missing accounts
   const dates = [...new Set(snapshots.map(s => s.snapshot_date))].sort()
@@ -341,14 +343,21 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
     accounts.forEach(acc => {
       const snap = relevant[acc.key]
       if (!snap) return
-      if (acc.is_debt) debt += parseFloat(snap.amount)
-      else assets += parseFloat(snap.amount)
+      if (!acc.is_debt) assets += parseFloat(snap.amount)
+      else if (!acc.exclude_from_nw) debt += parseFloat(snap.amount)
     })
     return {
       label: fmtDate(date),
       netWorth: assets - debt,
+      totalAssets: assets,
+      totalDebt: debt,
     }
   })
+
+  const savingsDelta = netWorthHistory.slice(1).map((point, i) => ({
+    label: point.label,
+    delta: point.netWorth - netWorthHistory[i].netWorth,
+  }))
 
   // Trend vs previous snapshot date
   const prev = netWorthHistory.at(-2)
@@ -400,7 +409,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: 'Net Worth',    value: netWorth,    pct: nwDiffPct, isDebt: false, accent: true },
+          { label: 'Net Worth',    value: netWorth,    pct: nwDiffPct, isDebt: false, accent: true, note: excludedFromNw.length > 0 ? `excl. ${excludedFromNw.map(a => a.label).join(', ')}` : null },
           { label: 'Total Assets', value: totalAssets, pct: assetsPct, isDebt: false },
           { label: 'Total Debt',   value: totalDebt,   pct: debtPct,   isDebt: true  },
           { label: 'Last Updated', value: null,        pct: null,      date: lastUpdatedDate },
@@ -427,6 +436,9 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
                   {Math.abs(card.pct).toFixed(1)}% vs prev
                 </span>
               )}
+              {card.note && (
+                <p className="text-[0.6rem] text-white/50 mt-1 leading-tight">{card.note}</p>
+              )}
             </div>
           )
         })}
@@ -436,27 +448,84 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
       {netWorthHistory.length > 1 && (
         <div className="bg-white rounded-2xl p-4">
           <p className="text-sm font-semibold text-gray-900 mb-3">Net Worth Over Time</p>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={netWorthHistory}>
               <defs>
                 <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={THEME} stopOpacity={0.28} />
+                  <stop offset="5%" stopColor={THEME} stopOpacity={0.28} />
                   <stop offset="95%" stopColor={THEME} stopOpacity={0.03} />
+                </linearGradient>
+                <linearGradient id="assetsGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="debtGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.12} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke={dark ? '#2e2b24' : '#f3f4f6'} />
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: dark ? '#9a9489' : '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis hide domain={['auto', 'auto']} />
-              <Tooltip formatter={v => fmt(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }} />
-              <Area type="monotone" dataKey="netWorth" stroke={THEME} strokeWidth={2} fill="url(#nwGrad)"
+              <Tooltip
+                formatter={(v, name) => {
+                  const labels = { netWorth: 'Net Worth', totalAssets: 'Assets', totalDebt: 'Debt' }
+                  return [fmt(v), labels[name] || name]
+                }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }}
+              />
+              <Area type="monotone" dataKey="totalAssets" stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 3" fill="url(#assetsGrad)" dot={false} />
+              <Area type="monotone" dataKey="totalDebt" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="4 3" fill="url(#debtGrad)" dot={false} />
+              <Area
+                type="monotone"
+                dataKey="netWorth"
+                stroke={THEME}
+                strokeWidth={2}
+                fill="url(#nwGrad)"
                 dot={(props) => {
                   const isLast = props.index === netWorthHistory.length - 1
-                  return isLast
-                    ? <circle key={props.index} cx={props.cx} cy={props.cy} r={4} fill={THEME} stroke="white" strokeWidth={2} />
-                    : <g key={props.index} />
+                  return isLast ? (
+                    <circle key={props.index} cx={props.cx} cy={props.cy} r={4} fill={THEME} stroke="white" strokeWidth={2} />
+                  ) : (
+                    <g key={props.index} />
+                  )
                 }}
               />
             </AreaChart>
+          </ResponsiveContainer>
+          <div className="flex gap-4 mt-2">
+            <span className="flex items-center gap-1 text-[0.65rem] text-gray-500">
+              <span className="inline-block w-4 border-t-2 border-solid" style={{ borderColor: THEME }} /> Net Worth
+            </span>
+            <span className="flex items-center gap-1 text-[0.65rem] text-gray-500">
+              <span className="inline-block w-4 border-t-2 border-dashed border-emerald-500" /> Assets
+            </span>
+            <span className="flex items-center gap-1 text-[0.65rem] text-gray-500">
+              <span className="inline-block w-4 border-t-2 border-dashed border-red-400" /> Debt
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly savings delta */}
+      {savingsDelta.length > 0 && (
+        <div className="bg-white rounded-2xl p-4">
+          <p className="text-sm font-semibold text-gray-900 mb-3">Monthly Savings</p>
+          <ResponsiveContainer width="100%" height={120}>
+            <BarChart data={savingsDelta} barSize={14}>
+              <CartesianGrid vertical={false} stroke={dark ? '#2e2b24' : '#f3f4f6'} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: dark ? '#9a9489' : '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis hide domain={['auto', 'auto']} />
+              <Tooltip
+                formatter={(v) => [fmt(v), 'Change']}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }}
+              />
+              <Bar dataKey="delta" radius={[3, 3, 0, 0]}>
+                {savingsDelta.map((entry, index) => (
+                  <Cell key={index} fill={entry.delta >= 0 ? '#10b981' : '#ef4444'} />
+                ))}
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       )}
@@ -746,6 +815,7 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
   const [owner, setOwner] = useState(initial?.owner ?? 'Both')
   const [goal, setGoal] = useState(initial?.goal ?? '')
   const [isDebt, setIsDebt] = useState(initial?.is_debt ?? defaultIsDebt)
+  const [excludeFromNw, setExcludeFromNw] = useState(initial?.exclude_from_nw ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -758,6 +828,7 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
       owner,
       goal: goal !== '' ? parseFloat(goal) : null,
       is_debt: isDebt,
+      exclude_from_nw: isDebt ? excludeFromNw : false,
     }
     let err
     if (initial) {
@@ -808,12 +879,21 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
               style={{ fontSize: 16 }} />
           </div>
           <label className="flex items-center gap-3 py-1 cursor-pointer">
-            <div onClick={() => setIsDebt(v => !v)}
+            <div onClick={() => { const next = !isDebt; setIsDebt(next); if (!next) setExcludeFromNw(false) }}
               className={`w-10 h-6 rounded-full transition-colors relative ${isDebt ? 'bg-red-400' : 'bg-gray-200'}`}>
               <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${isDebt ? 'left-5' : 'left-1'}`} />
             </div>
             <span className="text-sm text-gray-700">This is a debt / liability</span>
           </label>
+          {isDebt && (
+            <label className="flex items-center gap-3 py-1 cursor-pointer">
+              <div onClick={() => setExcludeFromNw(v => !v)}
+                className={`w-10 h-6 rounded-full transition-colors relative ${excludeFromNw ? 'bg-teal-500' : 'bg-gray-200'}`}>
+                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${excludeFromNw ? 'left-5' : 'left-1'}`} />
+              </div>
+              <span className="text-sm text-gray-700">Exclude from net worth</span>
+            </label>
+          )}
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={saving}
             className="w-full py-3 rounded-xl font-semibold text-white disabled:opacity-50"
