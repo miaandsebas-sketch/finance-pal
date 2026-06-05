@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
+import { useHubSync } from './lib/hubSync'
 import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Moon, Sun, Pencil, Trash2 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, ComposedChart, ReferenceLine, Cell } from 'recharts'
 
@@ -32,6 +33,30 @@ function DateInput({ value, onChange, className, style }) {
     <input type="text" value={text} onChange={handleChange}
       onBlur={() => setText(toDisplay(value))}
       placeholder="DD/MM/YYYY" className={className} style={style} />
+  )
+}
+
+// ── Tooltip styles ───────────────────────────────────────────────────────────
+
+const tooltipStyle = dark => ({ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' })
+const tooltipStyleFlat = dark => ({ fontSize: 12, borderRadius: 8, border: 'none', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' })
+
+// ── Modal shell ───────────────────────────────────────────────────────────────
+
+function ModalShell({ title, subtitle, onClose, children, zIndex = 'z-50', maxHeight = 'max-h-[90vh]' }) {
+  return (
+    <div className={`fixed inset-0 ${zIndex} bg-black/50 flex items-end sm:items-center justify-center`} onClick={onClose}>
+      <div className={`bg-white dark:bg-[#242019] rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md ${maxHeight} overflow-y-auto`} onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white dark:bg-[#242019] border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">{title}</h3>
+            {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 active:opacity-70"><X size={20} /></button>
+        </div>
+        {children}
+      </div>
+    </div>
   )
 }
 
@@ -107,40 +132,27 @@ function LoginScreen() {
 
 // ── Identity ──────────────────────────────────────────────────────────────────
 
-function Onboarding({ onSelect }) {
-  return (
-    <div className="min-h-dvh bg-[#FBF6EE] flex items-center justify-center px-6">
-      <div className="bg-white rounded-2xl p-8 w-full max-w-xs text-center shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Who's using this?</h2>
-        <p className="text-sm text-gray-400 mb-6">Personalises your view. You can change this anytime.</p>
-        {['Mia', 'Sebastian', 'Shared'].map(name => (
-          <button key={name} onClick={() => onSelect(name)}
-            className="w-full py-3 border-2 border-gray-100 rounded-xl font-semibold text-gray-800 mb-3 last:mb-0 active:bg-[#FBF6EE]">
-            {name === 'Shared' ? 'Shared (see all)' : name}
-          </button>
-        ))}
-      </div>
+function DevicePicker({ current, onSelect, onClose }) {
+  const names = ['Mia', 'Sebastian', 'Shared']
+  const inner = (
+    <div className="bg-white rounded-2xl p-8 w-full max-w-xs text-center shadow-sm">
+      <h2 className="text-lg font-semibold text-gray-900 mb-1">{onClose ? 'Switch view' : "Who's using this?"}</h2>
+      <p className="text-sm text-gray-400 mb-6">{onClose ? 'Change whose accounts you see first.' : 'Personalises your view. You can change this anytime.'}</p>
+      {names.map(name => (
+        <button key={name} onClick={() => onSelect(name)}
+          className={`w-full py-3 border-2 rounded-xl font-semibold mb-3 last:mb-0 transition-colors ${
+            onClose
+              ? (name === current ? 'border-teal-600 text-teal-700' : 'border-gray-100 text-gray-800')
+              : 'border-gray-100 text-gray-800 active:bg-[#FBF6EE]'
+          }`}>
+          {name === 'Shared' ? 'Shared (see all)' : name}
+        </button>
+      ))}
+      {onClose && <button onClick={onClose} className="mt-1 text-sm text-gray-400 active:text-gray-600">Cancel</button>}
     </div>
   )
-}
-
-function IdentityPicker({ current, onSelect, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-6" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-8 w-full max-w-xs text-center shadow-sm" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Switch view</h2>
-        <p className="text-sm text-gray-400 mb-6">Change whose accounts you see first.</p>
-        {['Mia', 'Sebastian', 'Shared'].map(name => (
-          <button key={name} onClick={() => onSelect(name)}
-            className={`w-full py-3 border-2 rounded-xl font-semibold mb-3 last:mb-0 transition-colors ${
-              name === current ? 'border-teal-600 text-teal-700' : 'border-gray-100 text-gray-800'
-            }`}>
-            {name === 'Shared' ? 'Shared (see all)' : name}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
+  if (!onClose) return <div className="min-h-dvh bg-[#FBF6EE] flex items-center justify-center px-6">{inner}</div>
+  return <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-6" onClick={onClose}><div onClick={e => e.stopPropagation()}>{inner}</div></div>
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
@@ -164,21 +176,7 @@ function MainApp({ session }) {
   useEffect(() => {
     window.parent.postMessage({ type: 'app:tab', home: tab === 'dashboard' }, '*')
   }, [tab])
-  useEffect(() => {
-    function onMessage(e) {
-      if (e.data?.type === 'app:goHome') setTab('dashboard')
-      if (e.data?.type === 'hub:theme') {
-        const isDark = e.data.theme === 'dark'
-        setDark(isDark)
-        document.documentElement.classList.toggle('dark', isDark)
-        localStorage.setItem('ms-theme', e.data.theme)
-        const meta = document.querySelector('meta[name="theme-color"]')
-        if (meta) meta.content = isDark ? '#1a1713' : '#0f766e'
-      }
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [])
+  useHubSync({ themeColor: THEME, setDark, onGoHome: () => setTab('dashboard') })
 
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
@@ -190,9 +188,11 @@ function MainApp({ session }) {
   useEffect(() => {
     const urlDevice = new URLSearchParams(window.location.search).get('device')
     if (urlDevice) {
+      localStorage.setItem('mia-seb-identity', urlDevice)
+      localStorage.setItem(APP_DEVICE_KEY, urlDevice)
       setDevice(urlDevice)
     } else {
-      const stored = localStorage.getItem(APP_DEVICE_KEY) || localStorage.getItem('mia-seb-identity')
+      const stored = localStorage.getItem('mia-seb-identity') || localStorage.getItem(APP_DEVICE_KEY)
       if (stored) setDevice(stored)
     }
     setDeviceReady(true)
@@ -234,7 +234,7 @@ function MainApp({ session }) {
   }, [fetchAll])
 
   if (!deviceReady) return null
-  if (!device) return <Onboarding onSelect={handleDeviceSelect} />
+  if (!device) return <DevicePicker onSelect={handleDeviceSelect} />
 
   const latestSnap = {}
   snapshots.forEach(s => {
@@ -316,7 +316,7 @@ function MainApp({ session }) {
         })}
       </nav>
 
-      {showPicker && <IdentityPicker current={device} onSelect={handleDeviceSelect} onClose={() => setShowPicker(false)} />}
+      {showPicker && <DevicePicker current={device} onSelect={handleDeviceSelect} onClose={() => setShowPicker(false)} />}
     </div>
   )
 }
@@ -476,7 +476,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
                   const labels = { netWorth: 'Net Worth', totalAssets: 'Assets', totalDebt: 'Debt' }
                   return [fmt(v), labels[name] || name]
                 }}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }}
+                contentStyle={tooltipStyle(dark)}
               />
               <Area type="monotone" dataKey="totalAssets" stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 3" fill="url(#assetsGrad)" dot={false} />
               <Area type="monotone" dataKey="totalDebt" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="4 3" fill="url(#debtGrad)" dot={false} />
@@ -522,7 +522,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
               <YAxis hide domain={['auto', 'auto']} />
               <Tooltip
                 formatter={(v) => [fmt(v), 'Change']}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }}
+                contentStyle={tooltipStyle(dark)}
               />
               <Bar dataKey="delta" radius={[3, 3, 0, 0]}>
                 {savingsDelta.map((entry, index) => (
@@ -675,7 +675,7 @@ function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
                         interval="preserveStartEnd"
                       />
                       <YAxis hide domain={['auto', 'auto']} />
-                      <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }} />
+                      <Tooltip formatter={v => fmtDec(v)} labelFormatter={l => l} contentStyle={tooltipStyleFlat(dark)} />
                       {acc.goal > 0 && (
                         <ReferenceLine y={acc.goal} stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3"
                           label={{ value: fmt(acc.goal), position: 'insideTopRight', fontSize: 9, fill: '#f59e0b' }} />
@@ -731,13 +731,7 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90dvh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Add Snapshot</h3>
-          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
-        </div>
+    <ModalShell title="Add Snapshot" onClose={onClose} maxHeight="max-h-[90dvh]">
         <form onSubmit={handleSave} className="p-5 space-y-3">
           <div>
             <label className="text-xs text-gray-500 font-medium">Date</label>
@@ -770,8 +764,7 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
             {saving ? 'Saving…' : 'Save Snapshot'}
           </button>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -810,7 +803,7 @@ function AccountDetailModal({ account, snapshots, onClose, onRefresh, dark }) {
                 <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#d1d5db' }} axisLine={false} tickLine={false}
                   ticks={[chartData[0].label, chartData.at(-1).label]} interval="preserveStartEnd" />
                 <YAxis hide domain={['auto', 'auto']} />
-                <Tooltip formatter={v => fmtDec(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }} />
+                <Tooltip formatter={v => fmtDec(v)} contentStyle={tooltipStyleFlat(dark)} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -873,17 +866,8 @@ function SnapshotEditForm({ snapshot, account, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md"
-        onClick={e => e.stopPropagation()}>
-        <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-gray-900">Edit Snapshot</h3>
-            <p className="text-xs text-gray-400">{account.label}</p>
-          </div>
-          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
-        </div>
-        <form onSubmit={handleSave} className="p-5 space-y-3">
+    <ModalShell title="Edit Snapshot" subtitle={account.label} onClose={onClose} zIndex="z-[60]" maxHeight="">
+      <form onSubmit={handleSave} className="p-5 space-y-3">
           <div>
             <label className="text-xs text-gray-500 font-medium">Date</label>
             <DateInput value={date} onChange={setDate}
@@ -903,8 +887,7 @@ function SnapshotEditForm({ snapshot, account, onClose, onSaved }) {
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -1118,7 +1101,7 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
                   if (name === 'cumulative') return [fmt(v), 'Cumulative']
                   return [fmt(v), invTypes.find(t => t.key === name)?.label || name]
                 }}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backgroundColor: dark ? '#242019' : '#fff', color: dark ? '#f0ece4' : '#374151' }}
+                contentStyle={tooltipStyle(dark)}
               />
               {invTypes.map(t => (
                 <Bar key={t.key} yAxisId="left" dataKey={t.key} stackId="a" fill={t.color} />
@@ -1240,14 +1223,8 @@ function InvestmentForm({ invTypes, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md"
-        onClick={e => e.stopPropagation()}>
-        <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Log Investment</h3>
-          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
-        </div>
-        <form onSubmit={handleSave} className="p-5 space-y-3">
+    <ModalShell title="Log Investment" onClose={onClose} maxHeight="">
+      <form onSubmit={handleSave} className="p-5 space-y-3">
           <div>
             <label className="text-xs text-gray-500 font-medium">Type</label>
             <select value={type} onChange={e => setType(e.target.value)}
@@ -1281,8 +1258,7 @@ function InvestmentForm({ invTypes, onClose, onSaved }) {
             {saving ? 'Saving…' : 'Save'}
           </button>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -1555,13 +1531,7 @@ function HomeItemForm({ initial, device, onClose, onSaved, onDeleted }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90dvh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">{initial ? 'Edit Item' : 'Add Item'}</h3>
-          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
-        </div>
+    <ModalShell title={initial ? 'Edit Item' : 'Add Item'} onClose={onClose} maxHeight="max-h-[90dvh]">
         <form onSubmit={handleSave} className="p-5 space-y-3">
           <div>
             <label className="text-xs text-gray-500 font-medium">Title</label>
@@ -1612,7 +1582,6 @@ function HomeItemForm({ initial, device, onClose, onSaved, onDeleted }) {
             </button>
           )}
         </form>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
