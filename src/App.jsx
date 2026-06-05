@@ -84,7 +84,9 @@ function LoginScreen() {
   return (
     <div className="min-h-dvh flex items-center justify-center px-6 bg-[#FBF6EE]">
       <form onSubmit={handleLogin} className="bg-white rounded-2xl p-8 w-full max-w-xs shadow-sm">
-        <div className="text-3xl text-center mb-1">💰</div>
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: THEME }}>
+          <DollarSign size={28} color="white" />
+        </div>
         <h1 className="text-xl font-bold mb-6 text-center text-gray-900">Finance Pal</h1>
         {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
         <input type="email" value={email} onChange={e => setEmail(e.target.value)}
