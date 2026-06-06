@@ -193,6 +193,7 @@ function MainApp({ session }) {
   const [investments, setInvestments] = useState([])
   const [invTypes, setInvTypes] = useState([])
   const [homeItems, setHomeItems] = useState([])
+  const [clusters, setClusters] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -216,18 +217,20 @@ function MainApp({ session }) {
   }
 
   const fetchAll = useCallback(async () => {
-    const [{ data: accs }, { data: snaps }, { data: invs }, { data: types }, { data: home }] = await Promise.all([
+    const [{ data: accs }, { data: snaps }, { data: invs }, { data: types }, { data: home }, { data: cls }] = await Promise.all([
       supabase.from('user_accounts').select('*').is('archived_at', null).order('sort_order'),
       supabase.from('account_snapshots').select('*').order('snapshot_date', { ascending: true }),
       supabase.from('investment_purchases').select('*').order('purchase_date', { ascending: false }),
       supabase.from('investment_types').select('*').order('sort_order'),
       supabase.from('home_improvement_items').select('*').order('created_at', { ascending: true }),
+      supabase.from('dashboard_clusters').select('*').order('sort_order'),
     ])
     setAccounts(accs || [])
     setSnapshots(snaps || [])
     setInvestments(invs || [])
     setInvTypes(types || [])
     setHomeItems(home || [])
+    setClusters(cls || [])
     setLoading(false)
   }, [])
 
@@ -239,6 +242,7 @@ function MainApp({ session }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'investment_purchases' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'investment_types' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'home_improvement_items' }, fetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dashboard_clusters' }, fetchAll)
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [fetchAll])
@@ -291,7 +295,7 @@ function MainApp({ session }) {
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading…</div>
         ) : tab === 'dashboard' ? (
-          <Dashboard latestSnap={latestSnap} accounts={accounts} snapshots={snapshots} dark={dark} />
+          <Dashboard latestSnap={latestSnap} accounts={accounts} snapshots={snapshots} dark={dark} clusters={clusters} onRefresh={fetchAll} />
         ) : tab === 'accounts' ? (
           <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="assets" dark={dark} />
         ) : tab === 'debts' ? (
@@ -328,7 +332,8 @@ function MainApp({ session }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-function Dashboard({ latestSnap, accounts, snapshots, dark }) {
+function Dashboard({ latestSnap, accounts, snapshots, dark, clusters, onRefresh }) {
+  const [showClusterManager, setShowClusterManager] = useState(false)
   const assetAccounts = accounts.filter(a => !a.is_debt)
   const debtAccounts  = accounts.filter(a => a.is_debt)
 
@@ -452,6 +457,62 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
           )
         })}
       </div>
+
+      {/* Custom clusters */}
+      <div className="bg-white rounded-2xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Clusters</p>
+          <button onClick={() => setShowClusterManager(true)} className="text-gray-300 active:text-teal-600 p-1">
+            <Pencil size={14} />
+          </button>
+        </div>
+        {clusters.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-1">
+            No clusters yet — tap <span className="font-medium">✎</span> to add one
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {clusters.map(cluster => {
+              const total = cluster.account_keys.reduce((sum, key) => {
+                const acc = accounts.find(a => a.key === key)
+                const snap = latestSnap[key]
+                if (!snap || !acc) return sum
+                return sum + (acc.is_debt ? -parseFloat(snap.amount) : parseFloat(snap.amount))
+              }, 0)
+              const hasAnyPrev = cluster.account_keys.some(key => prevSnapByKey[key])
+              const prevTotal = hasAnyPrev ? cluster.account_keys.reduce((sum, key) => {
+                const acc = accounts.find(a => a.key === key)
+                const snap = prevSnapByKey[key]
+                if (!snap || !acc) return sum
+                return sum + (acc.is_debt ? -parseFloat(snap.amount) : parseFloat(snap.amount))
+              }, 0) : null
+              const pct = prevTotal != null && prevTotal !== 0 ? ((total - prevTotal) / Math.abs(prevTotal)) * 100 : null
+              return (
+                <div key={cluster.id} className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-xs font-medium text-gray-400 mb-1 truncate">{cluster.name}</p>
+                  <p className={`text-lg font-bold leading-tight ${total < 0 ? 'text-red-500' : 'text-gray-900'}`}>{fmt(total)}</p>
+                  {pct != null && (
+                    <span className={`flex items-center gap-0.5 text-xs mt-1 font-medium ${pct >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                      {pct >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                      {Math.abs(pct).toFixed(1)}% vs prev
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showClusterManager && (
+        <ClusterManager
+          clusters={clusters}
+          accounts={accounts}
+          latestSnap={latestSnap}
+          onClose={() => setShowClusterManager(false)}
+          onSaved={() => { setShowClusterManager(false); onRefresh() }}
+        />
+      )}
 
       {/* Net worth trend chart */}
       {netWorthHistory.length > 1 && (
@@ -609,6 +670,151 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
           ))}
         </>
       )}
+    </div>
+  )
+}
+
+// ── Cluster Manager ───────────────────────────────────────────────────────────
+
+function ClusterManager({ clusters, accounts, latestSnap, onClose, onSaved }) {
+  const [editing, setEditing] = useState(null)
+  const [showAdd, setShowAdd] = useState(false)
+
+  async function handleDelete(cluster) {
+    if (!confirm(`Delete "${cluster.name}"?`)) return
+    await supabase.from('dashboard_clusters').delete().eq('id', cluster.id)
+    onSaved()
+  }
+
+  return (
+    <ModalShell title="Dashboard Clusters" subtitle="Named sums of accounts" onClose={onClose}>
+      <div className="divide-y divide-gray-50">
+        {clusters.length === 0 && (
+          <p className="px-5 py-4 text-sm text-gray-400">No clusters yet — add one below.</p>
+        )}
+        {clusters.map(cluster => (
+          <div key={cluster.id} className="px-5 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">{cluster.name}</p>
+              <p className="text-xs text-gray-400">{cluster.account_keys.length} account{cluster.account_keys.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button onClick={() => setEditing(cluster)} className="text-xs text-teal-600 font-medium active:opacity-60">Edit</button>
+              <button onClick={() => handleDelete(cluster)} className="text-xs text-red-400 font-medium active:opacity-60">Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="px-5 py-4 border-t border-gray-100">
+        {showAdd ? (
+          <ClusterForm accounts={accounts} latestSnap={latestSnap} onClose={() => setShowAdd(false)} onSaved={onSaved} />
+        ) : (
+          <button onClick={() => setShowAdd(true)}
+            className="w-full py-3 rounded-xl border-2 border-dashed border-gray-200 text-sm font-medium text-gray-400 flex items-center justify-center gap-1 active:border-teal-300 active:text-teal-600">
+            <Plus size={16} /> Add cluster
+          </button>
+        )}
+      </div>
+      {editing && (
+        <ClusterForm initial={editing} accounts={accounts} latestSnap={latestSnap} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); onSaved() }} />
+      )}
+    </ModalShell>
+  )
+}
+
+function ClusterForm({ initial, accounts, latestSnap, onClose, onSaved }) {
+  const [name, setName] = useState(initial?.name ?? '')
+  const [selectedKeys, setSelectedKeys] = useState(new Set(initial?.account_keys ?? []))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function toggleKey(key) {
+    setSelectedKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    if (!name.trim()) { setError('Name is required'); return }
+    if (selectedKeys.size === 0) { setError('Select at least one account'); return }
+    setSaving(true)
+    const payload = { name: name.trim(), account_keys: [...selectedKeys] }
+    if (initial) {
+      if (!await withRetry(
+        () => supabase.from('dashboard_clusters').update(payload).eq('id', initial.id),
+        msg => { setError(msg); setSaving(false) }
+      )) return
+    } else {
+      const { data: hh } = await supabase.from('household_members').select('household_id').single()
+      if (!hh) { setError('Household not found'); setSaving(false); return }
+      const { data: maxOrder } = await supabase.from('dashboard_clusters').select('sort_order').order('sort_order', { ascending: false }).limit(1).single()
+      if (!await withRetry(
+        () => supabase.from('dashboard_clusters').insert({ ...payload, household_id: hh.household_id, sort_order: (maxOrder?.sort_order ?? 0) + 1 }),
+        msg => { setError(msg); setSaving(false) }
+      )) return
+    }
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85dvh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">{initial ? 'Edit Cluster' : 'New Cluster'}</h3>
+          <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-4">
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Retirement Sum"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mt-1 outline-none focus:border-teal-500"
+              style={{ fontSize: 16 }} autoFocus />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium block mb-1">Accounts to include</label>
+            <p className="text-xs text-gray-400 mb-3">Assets add to the total; debts subtract from it.</p>
+            {[
+              { label: 'Assets', items: accounts.filter(a => !a.is_debt) },
+              { label: 'Debts',  items: accounts.filter(a => a.is_debt)  },
+            ].filter(g => g.items.length > 0).map(group => (
+              <div key={group.label} className="mb-4">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group.label}</p>
+                <div className="space-y-2">
+                  {group.items.map(acc => {
+                    const snap = latestSnap[acc.key]
+                    const amount = snap ? parseFloat(snap.amount) : null
+                    return (
+                      <label key={acc.key} className="flex items-center justify-between gap-3 cursor-pointer py-0.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <input type="checkbox" checked={selectedKeys.has(acc.key)} onChange={() => toggleKey(acc.key)}
+                            className="w-4 h-4 rounded shrink-0 accent-teal-600" />
+                          <span className="text-sm text-gray-700 truncate">{acc.label}</span>
+                        </div>
+                        {amount != null && (
+                          <span className={`text-xs font-medium shrink-0 ${acc.is_debt ? 'text-red-400' : 'text-gray-400'}`}>
+                            {acc.is_debt ? '−' : ''}{fmtDec(amount)}
+                          </span>
+                        )}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <button type="submit" disabled={saving}
+            className="w-full py-3 rounded-xl font-semibold text-white disabled:opacity-50"
+            style={{ backgroundColor: THEME }}>
+            {saving ? 'Saving…' : initial ? 'Save Changes' : 'Create Cluster'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
