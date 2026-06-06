@@ -46,8 +46,8 @@ const tooltipStyleFlat = dark => ({ fontSize: 12, borderRadius: 8, border: 'none
 function ModalShell({ title, subtitle, onClose, children, zIndex = 'z-50', maxHeight = 'max-h-[90vh]' }) {
   return (
     <div className={`fixed inset-0 ${zIndex} bg-black/50 flex items-end sm:items-center justify-center`} onClick={onClose}>
-      <div className={`bg-white dark:bg-[#242019] rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md ${maxHeight} overflow-y-auto`} onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white dark:bg-[#242019] border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+      <div className={`bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md ${maxHeight} overflow-y-auto`} onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-gray-900">{title}</h3>
             {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
