@@ -52,3 +52,12 @@ create table home_improvement_items (
 alter table home_improvement_items enable row level security;
 create policy "household access" on home_improvement_items
   for all using (household_id = my_household_id());
+
+-- Realtime
+-- REPLICA IDENTITY FULL ensures all columns appear in UPDATE/DELETE payloads.
+alter publication supabase_realtime add table user_accounts, account_snapshots, investment_purchases, investment_types, home_improvement_items;
+alter table user_accounts          replica identity full;
+alter table account_snapshots      replica identity full;
+alter table investment_purchases   replica identity full;
+alter table investment_types       replica identity full;
+alter table home_improvement_items replica identity full;
