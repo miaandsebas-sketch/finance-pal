@@ -15,6 +15,16 @@ const fmtDate = (dateStr, withYear = false) =>
     : { day: 'numeric', month: 'short' }
   )
 
+async function withRetry(fn, onError, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    const { error } = await fn()
+    if (!error) return true
+    if (i < retries - 1) await new Promise(r => setTimeout(r, 600 * (i + 1)))
+  }
+  onError('Could not save — check your connection')
+  return false
+}
+
 // Displays/accepts DD/MM/YYYY; stores value as YYYY-MM-DD
 function DateInput({ value, onChange, className, style }) {
   const toDisplay = v => v ? v.split('-').reverse().join('/') : ''
@@ -725,8 +735,10 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
       amount: parseFloat(val),
       snapshot_date: date,
     }))
-    const { error: err } = await supabase.from('account_snapshots').upsert(rows, { onConflict: 'household_id,account_key,snapshot_date' })
-    if (err) { setError(err.message); setSaving(false); return }
+    if (!await withRetry(
+      () => supabase.from('account_snapshots').upsert(rows, { onConflict: 'household_id,account_key,snapshot_date' }),
+      msg => { setError(msg); setSaving(false) }
+    )) return
     onSaved()
   }
 
@@ -779,7 +791,8 @@ function AccountDetailModal({ account, snapshots, onClose, onRefresh, dark }) {
 
   async function handleDelete(snap) {
     if (!confirm(`Delete snapshot for ${fmtDate(snap.snapshot_date, true)}?`)) return
-    await supabase.from('account_snapshots').delete().eq('id', snap.id)
+    const { error } = await supabase.from('account_snapshots').delete().eq('id', snap.id)
+    if (error) return
     onRefresh()
   }
 
@@ -857,11 +870,10 @@ function SnapshotEditForm({ snapshot, account, onClose, onSaved }) {
     e.preventDefault()
     if (!amount) { setError('Amount is required'); return }
     setSaving(true)
-    const { error: err } = await supabase
-      .from('account_snapshots')
-      .update({ amount: parseFloat(amount), snapshot_date: date })
-      .eq('id', snapshot.id)
-    if (err) { setError(err.message); setSaving(false); return }
+    if (!await withRetry(
+      () => supabase.from('account_snapshots').update({ amount: parseFloat(amount), snapshot_date: date }).eq('id', snapshot.id),
+      msg => { setError(msg); setSaving(false) }
+    )) return
     onSaved()
   }
 
@@ -967,22 +979,21 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
       is_debt: isDebt,
       exclude_from_nw: excludeFromNw,
     }
-    let err
     if (initial) {
-      ;({ error: err } = await supabase.from('user_accounts').update(payload).eq('id', initial.id))
+      if (!await withRetry(
+        () => supabase.from('user_accounts').update(payload).eq('id', initial.id),
+        msg => { setError(msg); setSaving(false) }
+      )) return
     } else {
       const { data: hh } = await supabase.from('household_members').select('household_id').single()
       if (!hh) { setError('Household not found'); setSaving(false); return }
       const { data: maxOrder } = await supabase.from('user_accounts').select('sort_order').order('sort_order', { ascending: false }).limit(1).single()
       const key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now()
-      ;({ error: err } = await supabase.from('user_accounts').insert({
-        ...payload,
-        key,
-        household_id: hh.household_id,
-        sort_order: (maxOrder?.sort_order ?? 0) + 1,
-      }))
+      if (!await withRetry(
+        () => supabase.from('user_accounts').insert({ ...payload, key, household_id: hh.household_id, sort_order: (maxOrder?.sort_order ?? 0) + 1 }),
+        msg => { setError(msg); setSaving(false) }
+      )) return
     }
-    if (err) { setError(err.message); setSaving(false); return }
     onSaved()
   }
 
@@ -1212,14 +1223,10 @@ function InvestmentForm({ invTypes, onClose, onSaved }) {
     setSaving(true)
     const { data: hh } = await supabase.from('household_members').select('household_id').single()
     if (!hh) { setError('Household not found'); setSaving(false); return }
-    const { error: err } = await supabase.from('investment_purchases').insert({
-      household_id: hh.household_id,
-      inv_type: type,
-      amount: parseFloat(amount),
-      purchase_date: date,
-      url: url || null,
-    })
-    if (err) { setError(err.message); setSaving(false); return }
+    if (!await withRetry(
+      () => supabase.from('investment_purchases').insert({ household_id: hh.household_id, inv_type: type, amount: parseFloat(amount), purchase_date: date, url: url || null }),
+      msg => { setError(msg); setSaving(false) }
+    )) return
     onSaved()
   }
 
@@ -1281,21 +1288,17 @@ function InvestmentTypeManager({ invTypes, investments, onClose, onSaved }) {
     setError('')
     const { data: hh } = await supabase.from('household_members').select('household_id').single()
     const nextOrder = invTypes.length > 0 ? Math.max(...invTypes.map(t => t.sort_order)) + 1 : 1
-    const { error: err } = await supabase.from('investment_types').insert({
-      household_id: hh.household_id,
-      key,
-      label: label.trim(),
-      emoji,
-      color,
-      sort_order: nextOrder,
-    })
-    if (err) { setError(err.message); setSaving(false); return }
+    if (!await withRetry(
+      () => supabase.from('investment_types').insert({ household_id: hh.household_id, key, label: label.trim(), emoji, color, sort_order: nextOrder }),
+      msg => { setError(msg); setSaving(false) }
+    )) return
     setSaving(false)
     onSaved()
   }
 
   async function handleDelete(type) {
-    await supabase.from('investment_types').delete().eq('id', type.id)
+    const { error } = await supabase.from('investment_types').delete().eq('id', type.id)
+    if (error) { setError('Could not delete — please try again'); return }
     onSaved()
   }
 
@@ -1505,16 +1508,19 @@ function HomeItemForm({ initial, device, onClose, onSaved, onDeleted }) {
       estimated_budget: budget ? parseFloat(budget) : null,
       remarks: remarks.trim() || null,
     }
-    const { error: err } = initial
-      ? await supabase.from('home_improvement_items').update(payload).eq('id', initial.id)
-      : await supabase.from('home_improvement_items').insert(payload)
-    if (err) { setError(err.message); setSaving(false); return }
+    if (!await withRetry(
+      () => initial
+        ? supabase.from('home_improvement_items').update(payload).eq('id', initial.id)
+        : supabase.from('home_improvement_items').insert(payload),
+      msg => { setError(msg); setSaving(false) }
+    )) return
     onSaved()
   }
 
   async function handleDelete() {
     if (!confirm('Delete this item?')) return
-    await supabase.from('home_improvement_items').delete().eq('id', initial.id)
+    const { error } = await supabase.from('home_improvement_items').delete().eq('id', initial.id)
+    if (error) { setError('Could not delete — please try again'); return }
     onDeleted()
   }
 
