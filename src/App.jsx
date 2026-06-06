@@ -489,7 +489,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark }) {
                 dot={(props) => {
                   const isLast = props.index === netWorthHistory.length - 1
                   return isLast ? (
-                    <circle key={props.index} cx={props.cx} cy={props.cy} r={4} fill={THEME} stroke="white" strokeWidth={2} />
+                    <circle key={props.index} cx={props.cx} cy={props.cy} r={4} fill={THEME} stroke={dark ? '#242019' : '#fff'} strokeWidth={2} />
                   ) : (
                     <g key={props.index} />
                   )
@@ -669,7 +669,7 @@ function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
                     <LineChart data={chartData}>
                       <Line type="monotone" dataKey="amount" stroke={acc.is_debt ? '#ef4444' : THEME} strokeWidth={2} dot={false} />
                       <XAxis dataKey="label"
-                        tick={{ fontSize: 9, fill: '#d1d5db' }}
+                        tick={{ fontSize: 9, fill: dark ? '#9a9489' : '#9ca3af' }}
                         axisLine={false} tickLine={false}
                         ticks={[chartData[0].label, chartData.at(-1).label]}
                         interval="preserveStartEnd"
@@ -800,7 +800,7 @@ function AccountDetailModal({ account, snapshots, onClose, onRefresh, dark }) {
             <ResponsiveContainer width="100%" height={90}>
               <LineChart data={chartData}>
                 <Line type="monotone" dataKey="amount" stroke={account.is_debt ? '#ef4444' : THEME} strokeWidth={2} dot={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#d1d5db' }} axisLine={false} tickLine={false}
+                <XAxis dataKey="label" tick={{ fontSize: 9, fill: dark ? '#9a9489' : '#9ca3af' }} axisLine={false} tickLine={false}
                   ticks={[chartData[0].label, chartData.at(-1).label]} interval="preserveStartEnd" />
                 <YAxis hide domain={['auto', 'auto']} />
                 <Tooltip formatter={v => fmtDec(v)} contentStyle={tooltipStyleFlat(dark)} />
@@ -1102,6 +1102,7 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
                   return [fmt(v), invTypes.find(t => t.key === name)?.label || name]
                 }}
                 contentStyle={tooltipStyle(dark)}
+                cursor={{ fill: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }}
               />
               {invTypes.map(t => (
                 <Bar key={t.key} yAxisId="left" dataKey={t.key} stackId="a" fill={t.color} />
