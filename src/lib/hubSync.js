@@ -1,10 +1,13 @@
 // hub integration — shared pattern across all pal apps
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
-export function useHubSync({ themeColor, setDark, onGoHome }) {
+export function useHubSync({ themeColor, setDark, onGoHome, onRefresh }) {
+  const refreshRef = useRef(onRefresh)
+  useEffect(() => { refreshRef.current = onRefresh })
   useEffect(() => {
     function onMessage(e) {
       if (e.data?.type === 'app:goHome') onGoHome?.()
+      if (e.data?.type === 'hub:refresh') refreshRef.current?.()
       if (e.data?.type === 'hub:theme') {
         const isDark = e.data.theme === 'dark'
         setDark(isDark)

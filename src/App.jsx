@@ -186,7 +186,7 @@ function MainApp({ session }) {
   useEffect(() => {
     window.parent.postMessage({ type: 'app:tab', home: tab === 'dashboard' }, '*')
   }, [tab])
-  useHubSync({ themeColor: THEME, setDark, onGoHome: () => setTab('dashboard') })
+  useHubSync({ themeColor: THEME, setDark, onGoHome: () => setTab('dashboard'), onRefresh: fetchAll })
 
   const [accounts, setAccounts] = useState([])
   const [snapshots, setSnapshots] = useState([])
