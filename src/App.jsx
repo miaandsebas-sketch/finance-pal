@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
 import { useHubSync } from './lib/hubSync'
-import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Pencil, Trash2 } from 'lucide-react'
+import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Pencil, Trash2, Moon, Sun } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, ComposedChart, ReferenceLine, Cell } from 'recharts'
 
 const THEME = '#0f766e'
@@ -281,6 +281,13 @@ function MainApp({ session }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {window.self === window.top && (
+              <button onClick={toggleTheme}
+                className="w-[34px] h-[34px] rounded-full flex items-center justify-center active:opacity-70"
+                style={{ backgroundColor: `${THEME}1a`, color: THEME }}>
+                {dark ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
+            )}
             <button onClick={() => setShowPicker(true)}
               className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-sm active:opacity-70"
               style={{ backgroundColor: `${THEME}1a`, color: THEME }}>
