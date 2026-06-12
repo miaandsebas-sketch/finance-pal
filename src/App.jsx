@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import { useHubSync } from './lib/hubSync'
-import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Pencil, Trash2, Moon, Sun } from 'lucide-react'
+import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Pencil, Trash2, Moon, Sun, Search } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, ComposedChart, ReferenceLine, Cell } from 'recharts'
 
 const THEME = '#0f766e'
@@ -1680,6 +1680,12 @@ const QUADRANTS = [
 function HomeImprovement({ items, onRefresh, device, showToast }) {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [query, setQuery] = useState('')
+
+  const needle = query.trim().toLowerCase()
+  const visible = needle
+    ? items.filter(i => [i.title, i.description, i.remarks].some(f => f && f.toLowerCase().includes(needle)))
+    : items
 
   return (
     <div className="px-4 pt-4 space-y-4">
@@ -1691,12 +1697,23 @@ function HomeImprovement({ items, onRefresh, device, showToast }) {
         </button>
       </div>
 
+      {items.length > 0 && (
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search items…"
+            className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-teal-500 bg-white"
+            style={{ fontSize: 16 }} />
+        </div>
+      )}
+
       {items.length === 0 ? (
         <p className="text-center text-sm text-gray-400 py-8">No items yet — tap Add to get started.</p>
+      ) : visible.length === 0 ? (
+        <p className="text-center text-sm text-gray-400 py-8">No items match your search.</p>
       ) : null}
 
       {QUADRANTS.map(q => {
-        const qItems = items.filter(i => i.urgency === q.urgency && i.importance === q.importance)
+        const qItems = visible.filter(i => i.urgency === q.urgency && i.importance === q.importance)
         if (qItems.length === 0) return null
         return (
           <div key={`${q.urgency}-${q.importance}`} className="bg-white rounded-2xl overflow-hidden">
