@@ -87,7 +87,13 @@ export default function App() {
           window.history.replaceState(null, '', window.location.pathname + window.location.search)
         }
       }
-      const { data: { session } } = await supabase.auth.getSession()
+      let { data: { session } } = await supabase.auth.getSession()
+      if (!session && window.self !== window.top) {
+        // e.g. the iframe reloaded after the hash was consumed — ask the hub
+        window.parent.postMessage({ type: 'app:requestToken' }, '*')
+        await new Promise(r => setTimeout(r, 1500))
+        ;({ data: { session } } = await supabase.auth.getSession())
+      }
       setSession(session)
       setAuthLoading(false)
     }
@@ -95,6 +101,29 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => subscription.unsubscribe()
   }, [])
+
+  // While embedded, the hub is the single owner of the refresh token: accept
+  // fresh tokens it sends, and ask for new ones before ours expire.
+  useEffect(() => {
+    if (window.self === window.top) return
+    function onMessage(e) {
+      if (e.data?.type === 'hub:token' && e.data.access_token && e.data.refresh_token) {
+        supabase.auth.setSession({ access_token: e.data.access_token, refresh_token: e.data.refresh_token })
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
+
+  useEffect(() => {
+    if (window.self === window.top || !session) return
+    const id = setInterval(() => {
+      if (session.expires_at * 1000 - Date.now() < 10 * 60 * 1000) {
+        window.parent.postMessage({ type: 'app:requestToken' }, '*')
+      }
+    }, 30000)
+    return () => clearInterval(id)
+  }, [session])
 
   if (authLoading) return null
   if (!session) return <LoginScreen />
