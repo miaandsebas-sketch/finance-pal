@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import { useHubSync } from './lib/hubSync'
 import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Pencil, Trash2, Moon, Sun } from 'lucide-react'
@@ -193,6 +193,14 @@ function MainApp({ session }) {
   const [homeItems, setHomeItems] = useState([])
   const [clusters, setClusters] = useState([])
   const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
+
+  function showToast(msg, undo) {
+    setToast({ msg, undo })
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), undo ? 5000 : 1900)
+  }
 
   useEffect(() => {
     const urlDevice = new URLSearchParams(window.location.search).get('device')
@@ -301,15 +309,15 @@ function MainApp({ session }) {
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading…</div>
         ) : tab === 'dashboard' ? (
-          <Dashboard latestSnap={latestSnap} accounts={accounts} snapshots={snapshots} dark={dark} clusters={clusters} onRefresh={fetchAll} />
+          <Dashboard latestSnap={latestSnap} accounts={accounts} snapshots={snapshots} dark={dark} clusters={clusters} onRefresh={fetchAll} showToast={showToast} />
         ) : tab === 'accounts' ? (
-          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="assets" dark={dark} />
+          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="assets" dark={dark} showToast={showToast} />
         ) : tab === 'debts' ? (
-          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="debts" dark={dark} />
+          <Snapshots snapshots={snapshots} accounts={accounts} onRefresh={fetchAll} filter="debts" dark={dark} showToast={showToast} />
         ) : tab === 'investments' ? (
-          <Investments investments={investments} invTypes={invTypes} latestSnap={latestSnap} onRefresh={fetchAll} dark={dark} />
+          <Investments investments={investments} invTypes={invTypes} latestSnap={latestSnap} onRefresh={fetchAll} dark={dark} showToast={showToast} />
         ) : (
-          <HomeImprovement items={homeItems} onRefresh={fetchAll} device={device} />
+          <HomeImprovement items={homeItems} onRefresh={fetchAll} device={device} showToast={showToast} />
         )}
         </div>
       </main>
@@ -332,13 +340,23 @@ function MainApp({ session }) {
       </nav>
 
       {showPicker && <DevicePicker current={device} onSelect={handleDeviceSelect} onClose={() => setShowPicker(false)} />}
+
+      {toast && (
+        <div className="fixed z-50 rounded-full px-4 py-2 text-sm font-medium shadow-sm"
+          style={{ bottom: 'max(72px, env(safe-area-inset-bottom) + 64px)', left: '50%', transform: 'translateX(-50%)', backgroundColor: dark ? '#f0ece4' : '#1f2937', color: dark ? '#1a1713' : '#fff' }}>
+          {toast.msg}
+          {toast.undo && (
+            <button onClick={() => { clearTimeout(toastTimer.current); setToast(null); toast.undo() }} className="ml-3 font-semibold underline">Undo</button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-function Dashboard({ latestSnap, accounts, snapshots, dark, clusters, onRefresh }) {
+function Dashboard({ latestSnap, accounts, snapshots, dark, clusters, onRefresh, showToast }) {
   const [showClusterManager, setShowClusterManager] = useState(false)
   const assetAccounts = accounts.filter(a => !a.is_debt)
   const debtAccounts  = accounts.filter(a => a.is_debt)
@@ -517,6 +535,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark, clusters, onRefresh 
           latestSnap={latestSnap}
           onClose={() => setShowClusterManager(false)}
           onSaved={() => { setShowClusterManager(false); onRefresh() }}
+          showToast={showToast}
         />
       )}
 
@@ -682,7 +701,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark, clusters, onRefresh 
 
 // ── Cluster Manager ───────────────────────────────────────────────────────────
 
-function ClusterManager({ clusters, accounts, latestSnap, onClose, onSaved }) {
+function ClusterManager({ clusters, accounts, latestSnap, onClose, onSaved, showToast }) {
   const [editing, setEditing] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
 
@@ -690,6 +709,10 @@ function ClusterManager({ clusters, accounts, latestSnap, onClose, onSaved }) {
     if (!confirm(`Delete "${cluster.name}"?`)) return
     await supabase.from('dashboard_clusters').delete().eq('id', cluster.id)
     onSaved()
+    showToast(`Deleted ${cluster.name}`, async () => {
+      await supabase.from('dashboard_clusters').insert(cluster)
+      onSaved()
+    })
   }
 
   return (
@@ -827,7 +850,7 @@ function ClusterForm({ initial, accounts, latestSnap, onClose, onSaved }) {
 
 // ── Snapshots ─────────────────────────────────────────────────────────────────
 
-function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
+function Snapshots({ snapshots, accounts, onRefresh, filter, dark, showToast }) {
   const [showForm, setShowForm] = useState(false)
   const [showManager, setShowManager] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState(null)
@@ -909,7 +932,7 @@ function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
       )}
 
       {showForm && <SnapshotForm accounts={visibleAccounts} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
-      {showManager && <AccountManager accounts={visibleAccounts} defaultIsDebt={isDebtsPage} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
+      {showManager && <AccountManager accounts={visibleAccounts} defaultIsDebt={isDebtsPage} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} showToast={showToast} />}
       {selectedAccount && (
         <AccountDetailModal
           account={selectedAccount}
@@ -917,6 +940,7 @@ function Snapshots({ snapshots, accounts, onRefresh, filter, dark }) {
           onClose={() => setSelectedAccount(null)}
           onRefresh={onRefresh}
           dark={dark}
+          showToast={showToast}
         />
       )}
     </div>
@@ -989,7 +1013,7 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
 
 // ── Account Detail ────────────────────────────────────────────────────────────
 
-function AccountDetailModal({ account, snapshots, onClose, onRefresh, dark }) {
+function AccountDetailModal({ account, snapshots, onClose, onRefresh, dark, showToast }) {
   const [editing, setEditing] = useState(null)
 
   const sorted = [...snapshots].sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date))
@@ -1001,6 +1025,10 @@ function AccountDetailModal({ account, snapshots, onClose, onRefresh, dark }) {
     const { error } = await supabase.from('account_snapshots').delete().eq('id', snap.id)
     if (error) return
     onRefresh()
+    showToast('Snapshot deleted', async () => {
+      await supabase.from('account_snapshots').insert(snap)
+      onRefresh()
+    })
   }
 
   return (
@@ -1112,7 +1140,7 @@ function SnapshotEditForm({ snapshot, account, onClose, onSaved }) {
 
 // ── Account Manager ───────────────────────────────────────────────────────────
 
-function AccountManager({ accounts, onClose, onSaved, defaultIsDebt = false }) {
+function AccountManager({ accounts, onClose, onSaved, defaultIsDebt = false, showToast }) {
   const [editing, setEditing] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
 
@@ -1141,6 +1169,10 @@ function AccountManager({ accounts, onClose, onSaved, defaultIsDebt = false }) {
                   if (!confirm(`Remove "${acc.label}"? Past snapshots are kept.`)) return
                   await supabase.from('user_accounts').update({ archived_at: new Date().toISOString() }).eq('id', acc.id)
                   onSaved()
+                  showToast(`Removed ${acc.label}`, async () => {
+                    await supabase.from('user_accounts').update({ archived_at: null }).eq('id', acc.id)
+                    onSaved()
+                  })
                 }} className="text-xs text-red-400 font-medium active:opacity-60">Remove</button>
               </div>
             </div>
@@ -1261,7 +1293,7 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
 
 // ── Investments ───────────────────────────────────────────────────────────────
 
-function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
+function Investments({ investments, invTypes, latestSnap, onRefresh, dark, showToast }) {
   const [showForm, setShowForm] = useState(false)
   const [showManager, setShowManager] = useState(false)
 
@@ -1399,6 +1431,10 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
                     <button onClick={async () => {
                       await supabase.from('investment_purchases').delete().eq('id', inv.id)
                       onRefresh()
+                      showToast(`Deleted ${fmtDec(parseFloat(inv.amount))} purchase`, async () => {
+                        await supabase.from('investment_purchases').insert(inv)
+                        onRefresh()
+                      })
                     }} className="text-gray-200 active:text-red-400 shrink-0 p-1">
                       <X size={14} />
                     </button>
@@ -1411,7 +1447,7 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark }) {
       })}
 
       {showForm && <InvestmentForm invTypes={invTypes} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); onRefresh() }} />}
-      {showManager && <InvestmentTypeManager invTypes={invTypes} investments={investments} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} />}
+      {showManager && <InvestmentTypeManager invTypes={invTypes} investments={investments} onClose={() => setShowManager(false)} onSaved={() => { setShowManager(false); onRefresh() }} showToast={showToast} />}
     </div>
   )
 }
@@ -1477,7 +1513,7 @@ function InvestmentForm({ invTypes, onClose, onSaved }) {
   )
 }
 
-function InvestmentTypeManager({ invTypes, investments, onClose, onSaved }) {
+function InvestmentTypeManager({ invTypes, investments, onClose, onSaved, showToast }) {
   const [showAdd, setShowAdd] = useState(false)
   const [label, setLabel] = useState('')
   const [emoji, setEmoji] = useState('📈')
@@ -1507,6 +1543,10 @@ function InvestmentTypeManager({ invTypes, investments, onClose, onSaved }) {
     const { error } = await supabase.from('investment_types').delete().eq('id', type.id)
     if (error) { setError('Could not delete — please try again'); return }
     onSaved()
+    showToast(`Deleted ${type.label}`, async () => {
+      await supabase.from('investment_types').insert(type)
+      onSaved()
+    })
   }
 
   return (
@@ -1608,7 +1648,7 @@ const QUADRANTS = [
   { urgency: 'Not Urgent', importance: 'Not Important', label: 'Delay',       color: 'text-gray-400' },
 ]
 
-function HomeImprovement({ items, onRefresh, device }) {
+function HomeImprovement({ items, onRefresh, device, showToast }) {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
 
@@ -1677,13 +1717,14 @@ function HomeImprovement({ items, onRefresh, device }) {
           onClose={() => { setShowForm(false); setEditing(null) }}
           onSaved={() => { setShowForm(false); setEditing(null); onRefresh() }}
           onDeleted={() => { setEditing(null); onRefresh() }}
+          showToast={showToast}
         />
       )}
     </div>
   )
 }
 
-function HomeItemForm({ initial, device, onClose, onSaved, onDeleted }) {
+function HomeItemForm({ initial, device, onClose, onSaved, onDeleted, showToast }) {
   const defaultProposer = device === 'Mia' ? 'Mingyue' : device === 'Sebastian' ? 'Sebastian' : ''
   const [title, setTitle] = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
@@ -1729,6 +1770,10 @@ function HomeItemForm({ initial, device, onClose, onSaved, onDeleted }) {
     const { error } = await supabase.from('home_improvement_items').delete().eq('id', initial.id)
     if (error) { setError('Could not delete — please try again'); return }
     onDeleted()
+    showToast(`Deleted ${initial.title}`, async () => {
+      await supabase.from('home_improvement_items').insert(initial)
+      onDeleted()
+    })
   }
 
   function Sel({ label, value, onChange, options }) {
