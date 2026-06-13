@@ -6,6 +6,8 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart,
 
 const THEME = '#0f766e'
 const APP_DEVICE_KEY = 'finance-pal-device'
+// Device identities map to account-owner names
+const DEVICE_TO_OWNER = { Mia: 'Mingyue', Sebastian: 'Sebastian' }
 
 const fmt = n => n == null ? '—' : '$' + Math.round(n).toLocaleString()
 const fmtDec = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -459,9 +461,14 @@ function Dashboard({ latestSnap, accounts, snapshots, dark, clusters, onRefresh,
     if (current == null || previous == null) return <span className="text-gray-300 text-xs">—</span>
     const diff = current - previous
     if (diff === 0) return <span className="flex items-center gap-0.5 text-xs text-gray-400"><Minus size={12} /> 0%</span>
-    const pct = Math.abs(diff / previous * 100).toFixed(1)
     // For debts, going down is good (green); for assets, going up is good (green)
     const positive = isDebt ? diff < 0 : diff > 0
+    if (previous === 0) return (
+      <span className={`flex items-center gap-0.5 text-xs font-medium ${positive ? 'text-emerald-500' : 'text-red-400'}`}>
+        {diff > 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+      </span>
+    )
+    const pct = Math.abs(diff / previous * 100).toFixed(1)
     return (
       <span className={`flex items-center gap-0.5 text-xs font-medium ${positive ? 'text-emerald-500' : 'text-red-400'}`}>
         {diff > 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
@@ -660,7 +667,7 @@ function Dashboard({ latestSnap, accounts, snapshots, dark, clusters, onRefresh,
           <p className="text-sm font-semibold text-gray-900 mb-3">Goals</p>
           <div className="space-y-3">
             {goalAccounts.map(acc => {
-              const amount = latestSnap[acc.key] ? parseFloat(latestSnap[acc.key].amount) : 0
+              const amount = latestSnap[acc.key] ? (parseFloat(latestSnap[acc.key].amount) || 0) : 0
               const progress = Math.min(amount / acc.goal, 1)
               const pct = Math.round(progress * 100)
               return (
@@ -807,8 +814,8 @@ function ClusterForm({ initial, accounts, latestSnap, onClose, onSaved }) {
         msg => { setError(msg); setSaving(false) }
       )) return
     } else {
-      const { data: hh } = await supabase.from('household_members').select('household_id').single()
-      if (!hh) { setError('Household not found'); setSaving(false); return }
+      const { data: hh, error: hhErr } = await supabase.from('household_members').select('household_id').single()
+      if (!hh) { if (hhErr) console.error('Household lookup failed:', hhErr); setError('Household not found'); setSaving(false); return }
       const { data: maxOrder } = await supabase.from('dashboard_clusters').select('sort_order').order('sort_order', { ascending: false }).limit(1).single()
       if (!await withRetry(
         () => supabase.from('dashboard_clusters').insert({ ...payload, household_id: hh.household_id, sort_order: (maxOrder?.sort_order ?? 0) + 1 }),
@@ -987,8 +994,8 @@ function SnapshotForm({ accounts, onClose, onSaved }) {
     const entries = Object.entries(amounts).filter(([, v]) => v !== '')
     if (!entries.length) { setError('Enter at least one balance'); return }
     setSaving(true)
-    const { data: hh } = await supabase.from('household_members').select('household_id').single()
-    if (!hh) { setError('Household not found — check your Supabase setup'); setSaving(false); return }
+    const { data: hh, error: hhErr } = await supabase.from('household_members').select('household_id').single()
+    if (!hh) { if (hhErr) console.error('Household lookup failed:', hhErr); setError('Household not found — check your Supabase setup'); setSaving(false); return }
     const rows = entries.map(([key, val]) => ({
       household_id: hh.household_id,
       account_key: key,
@@ -1253,8 +1260,8 @@ function AccountForm({ initial, onClose, onSaved, defaultIsDebt = false }) {
         msg => { setError(msg); setSaving(false) }
       )) return
     } else {
-      const { data: hh } = await supabase.from('household_members').select('household_id').single()
-      if (!hh) { setError('Household not found'); setSaving(false); return }
+      const { data: hh, error: hhErr } = await supabase.from('household_members').select('household_id').single()
+      if (!hh) { if (hhErr) console.error('Household lookup failed:', hhErr); setError('Household not found'); setSaving(false); return }
       const { data: maxOrder } = await supabase.from('user_accounts').select('sort_order').order('sort_order', { ascending: false }).limit(1).single()
       const key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now()
       if (!await withRetry(
@@ -1461,7 +1468,7 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark, showT
                       await supabase.from('investment_purchases').delete().eq('id', inv.id)
                       onRefresh()
                       showToast(`Deleted ${fmtDec(parseFloat(inv.amount))} purchase`, async () => {
-                        await supabase.from('investment_purchases').insert(inv)
+                        await withRetry(() => supabase.from('investment_purchases').insert(inv), msg => showToast(msg))
                         onRefresh()
                       })
                     }} className="text-gray-200 active:text-red-400 shrink-0 p-1">
@@ -1491,10 +1498,11 @@ function InvestmentForm({ invTypes, onClose, onSaved }) {
 
   async function handleSave(e) {
     e.preventDefault()
+    if (!type) { setError('Add an investment type first'); return }
     if (!amount) { setError('Amount is required'); return }
     setSaving(true)
-    const { data: hh } = await supabase.from('household_members').select('household_id').single()
-    if (!hh) { setError('Household not found'); setSaving(false); return }
+    const { data: hh, error: hhErr } = await supabase.from('household_members').select('household_id').single()
+    if (!hh) { if (hhErr) console.error('Household lookup failed:', hhErr); setError('Household not found'); setSaving(false); return }
     if (!await withRetry(
       () => supabase.from('investment_purchases').insert({ household_id: hh.household_id, inv_type: type, amount: parseFloat(amount), purchase_date: date, url: url || null }),
       msg => { setError(msg); setSaving(false) }
@@ -1558,7 +1566,8 @@ function InvestmentTypeManager({ invTypes, investments, onClose, onSaved, showTo
     const key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
     setSaving(true)
     setError('')
-    const { data: hh } = await supabase.from('household_members').select('household_id').single()
+    const { data: hh, error: hhErr } = await supabase.from('household_members').select('household_id').single()
+    if (!hh) { if (hhErr) console.error('Household lookup failed:', hhErr); setError('Household not found'); setSaving(false); return }
     const nextOrder = invTypes.length > 0 ? Math.max(...invTypes.map(t => t.sort_order)) + 1 : 1
     if (!await withRetry(
       () => supabase.from('investment_types').insert({ household_id: hh.household_id, key, label: label.trim(), emoji, color, sort_order: nextOrder }),
@@ -1771,7 +1780,7 @@ function HomeImprovement({ items, onRefresh, device, showToast }) {
 }
 
 function HomeItemForm({ initial, device, onClose, onSaved, onDeleted, showToast }) {
-  const defaultProposer = device === 'Mia' ? 'Mingyue' : device === 'Sebastian' ? 'Sebastian' : ''
+  const defaultProposer = DEVICE_TO_OWNER[device] ?? ''
   const [title, setTitle] = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [proposer, setProposer] = useState(initial?.proposer ?? defaultProposer)
