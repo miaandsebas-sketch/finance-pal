@@ -6,6 +6,8 @@ export function useHubSync({ themeColor, setDark, onGoHome, onRefresh }) {
   useEffect(() => { refreshRef.current = onRefresh })
   useEffect(() => {
     function onMessage(e) {
+      // Only accept messages from the hub (our parent frame), not arbitrary windows
+      if (e.source !== window.parent) return
       if (e.data?.type === 'app:goHome') onGoHome?.()
       if (e.data?.type === 'hub:refresh') refreshRef.current?.()
       if (e.data?.type === 'hub:theme') {

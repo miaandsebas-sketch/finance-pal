@@ -109,6 +109,8 @@ export default function App() {
   useEffect(() => {
     if (window.self === window.top) return
     function onMessage(e) {
+      // Tokens must come from the hub (our parent frame) only — never another window
+      if (e.source !== window.parent) return
       if (e.data?.type === 'hub:token' && e.data.access_token && e.data.refresh_token) {
         supabase.auth.setSession({ access_token: e.data.access_token, refresh_token: e.data.refresh_token })
       }
@@ -743,7 +745,8 @@ function ClusterManager({ clusters, accounts, latestSnap, onClose, onSaved, show
 
   async function handleDelete(cluster) {
     if (!confirm(`Delete "${cluster.name}"?`)) return
-    await supabase.from('dashboard_clusters').delete().eq('id', cluster.id)
+    const { error } = await supabase.from('dashboard_clusters').delete().eq('id', cluster.id)
+    if (error) { showToast('Could not delete — please try again'); return }
     onSaved()
     showToast(`Deleted ${cluster.name}`, async () => {
       await supabase.from('dashboard_clusters').insert(cluster)
@@ -1059,7 +1062,7 @@ function AccountDetailModal({ account, snapshots, onClose, onRefresh, dark, show
   async function handleDelete(snap) {
     if (!confirm(`Delete snapshot for ${fmtDate(snap.snapshot_date, true)}?`)) return
     const { error } = await supabase.from('account_snapshots').delete().eq('id', snap.id)
-    if (error) return
+    if (error) { showToast('Could not delete — please try again'); return }
     onRefresh()
     showToast('Snapshot deleted', async () => {
       await supabase.from('account_snapshots').insert(snap)
@@ -1203,7 +1206,8 @@ function AccountManager({ accounts, onClose, onSaved, defaultIsDebt = false, sho
                   className="text-xs text-teal-600 font-medium active:opacity-60">Edit</button>
                 <button onClick={async () => {
                   if (!confirm(`Remove "${acc.label}"? Past snapshots are kept.`)) return
-                  await supabase.from('user_accounts').update({ archived_at: new Date().toISOString() }).eq('id', acc.id)
+                  const { error } = await supabase.from('user_accounts').update({ archived_at: new Date().toISOString() }).eq('id', acc.id)
+                  if (error) { showToast('Could not remove — please try again'); return }
                   onSaved()
                   showToast(`Removed ${acc.label}`, async () => {
                     await supabase.from('user_accounts').update({ archived_at: null }).eq('id', acc.id)
@@ -1465,7 +1469,8 @@ function Investments({ investments, invTypes, latestSnap, onRefresh, dark, showT
                       )}
                     </div>
                     <button onClick={async () => {
-                      await supabase.from('investment_purchases').delete().eq('id', inv.id)
+                      const { error } = await supabase.from('investment_purchases').delete().eq('id', inv.id)
+                      if (error) { showToast('Could not delete — please try again'); return }
                       onRefresh()
                       showToast(`Deleted ${fmtDec(parseFloat(inv.amount))} purchase`, async () => {
                         await withRetry(() => supabase.from('investment_purchases').insert(inv), msg => showToast(msg))
