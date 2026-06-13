@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import { useHubSync } from './lib/hubSync'
+import { fmt, fmtDec, fmtDate } from './lib/format'
 import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Pencil, Trash2, Moon, Sun, Search } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, ComposedChart, ReferenceLine, Cell } from 'recharts'
 
@@ -9,13 +10,6 @@ const APP_DEVICE_KEY = 'finance-pal-device'
 // Device identities map to account-owner names
 const DEVICE_TO_OWNER = { Mia: 'Mingyue', Sebastian: 'Sebastian' }
 
-const fmt = n => n == null ? '—' : '$' + Math.round(n).toLocaleString()
-const fmtDec = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtDate = (dateStr, withYear = false) =>
-  new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', withYear
-    ? { day: 'numeric', month: 'short', year: 'numeric' }
-    : { day: 'numeric', month: 'short' }
-  )
 
 async function withRetry(fn, onError, retries = 3) {
   for (let i = 0; i < retries; i++) {
