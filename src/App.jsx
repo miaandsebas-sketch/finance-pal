@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import { useHubSync } from './lib/hubSync'
+import { useAuth } from './lib/useAuth'
 import { fmt, fmtDec, fmtDate } from './lib/format'
 import { LayoutDashboard, Wallet, CreditCard, TrendingUp, Hammer, X, Plus, ExternalLink, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, DollarSign, Settings2, Pencil, Trash2, Moon, Sun, Search } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, ComposedChart, ReferenceLine, Cell } from 'recharts'
@@ -69,59 +70,7 @@ function ModalShell({ title, subtitle, onClose, children, zIndex = 'z-50', maxHe
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [session, setSession] = useState(null)
-  const [authLoading, setAuthLoading] = useState(true)
-
-  useEffect(() => {
-    async function initAuth() {
-      if (window.location.hash.includes('access_token')) {
-        const params = new URLSearchParams(window.location.hash.slice(1))
-        const access_token = params.get('access_token')
-        const refresh_token = params.get('refresh_token')
-        if (access_token && refresh_token) {
-          await supabase.auth.setSession({ access_token, refresh_token })
-          window.history.replaceState(null, '', window.location.pathname + window.location.search)
-        }
-      }
-      let { data: { session } } = await supabase.auth.getSession()
-      if (!session && window.self !== window.top) {
-        // e.g. the iframe reloaded after the hash was consumed — ask the hub
-        window.parent.postMessage({ type: 'app:requestToken' }, '*')
-        await new Promise(r => setTimeout(r, 1500))
-        ;({ data: { session } } = await supabase.auth.getSession())
-      }
-      setSession(session)
-      setAuthLoading(false)
-    }
-    initAuth()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
-    return () => subscription.unsubscribe()
-  }, [])
-
-  // While embedded, the hub is the single owner of the refresh token: accept
-  // fresh tokens it sends, and ask for new ones before ours expire.
-  useEffect(() => {
-    if (window.self === window.top) return
-    function onMessage(e) {
-      // Tokens must come from the hub (our parent frame) only — never another window
-      if (e.source !== window.parent) return
-      if (e.data?.type === 'hub:token' && e.data.access_token && e.data.refresh_token) {
-        supabase.auth.setSession({ access_token: e.data.access_token, refresh_token: e.data.refresh_token })
-      }
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [])
-
-  useEffect(() => {
-    if (window.self === window.top || !session) return
-    const id = setInterval(() => {
-      if (session.expires_at * 1000 - Date.now() < 10 * 60 * 1000) {
-        window.parent.postMessage({ type: 'app:requestToken' }, '*')
-      }
-    }, 30000)
-    return () => clearInterval(id)
-  }, [session])
+  const { session, authLoading } = useAuth()
 
   if (authLoading) return null
   if (!session) return <LoginScreen />
